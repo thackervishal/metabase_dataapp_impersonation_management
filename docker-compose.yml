@@ -1,0 +1,71 @@
+services:
+  app-db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${MB_APP_DB_NAME}
+      POSTGRES_USER: ${MB_APP_DB_USER}
+      POSTGRES_PASSWORD: ${MB_APP_DB_PASSWORD}
+    volumes:
+      - app_db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MB_APP_DB_USER} -d ${MB_APP_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  sample-dwh:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${SAMPLE_DWH_DB}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${SAMPLE_DWH_SUPERUSER_PASSWORD}
+      SAMPLE_DWH_METABASE_ROLE_PASSWORD: ${SAMPLE_DWH_METABASE_ROLE_PASSWORD}
+    ports:
+      - "${SAMPLE_DWH_PORT}:5432"
+    volumes:
+      - sample_dwh_data:/var/lib/postgresql/data
+      - ./seed/sample-dwh:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${SAMPLE_DWH_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  metabase:
+    build:
+      context: ../metabase
+      additional_contexts:
+        metabase_git: ../metabase/.git
+      args:
+        MB_EDITION: ee
+        VERSION: v1.64.0-data-apps-local
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${MB_APP_DB_NAME}
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${MB_APP_DB_USER}
+      MB_DB_PASS: ${MB_APP_DB_PASSWORD}
+      MB_DB_HOST: app-db
+      MB_PREMIUM_EMBEDDING_TOKEN: ${MB_PREMIUM_EMBEDDING_TOKEN}
+      MB_CONFIG_FILE_PATH: /metabase-config/config.yml
+      MB_ADMIN_EMAIL: ${MB_ADMIN_EMAIL}
+      MB_ADMIN_PASSWORD: ${MB_ADMIN_PASSWORD}
+      MB_AUTOMATION_API_KEY: ${MB_AUTOMATION_API_KEY}
+      MB_SITE_NAME: ${MB_SITE_NAME}
+      MB_CHECK_FOR_UPDATES: "false"
+      MB_STORE_USE_STAGING: "true"
+      SAMPLE_DWH_DB: ${SAMPLE_DWH_DB}
+      SAMPLE_DWH_METABASE_ROLE_PASSWORD: ${SAMPLE_DWH_METABASE_ROLE_PASSWORD}
+    ports:
+      - "${METABASE_PORT}:3000"
+    volumes:
+      - ./seed/metabase/config.yml:/metabase-config/config.yml:ro
+    depends_on:
+      app-db:
+        condition: service_healthy
+      sample-dwh:
+        condition: service_healthy
+
+volumes:
+  app_db_data:
+  sample_dwh_data:

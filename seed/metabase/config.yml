@@ -1,0 +1,27 @@
+version: 1
+config:
+  settings:
+    site-name: "{{ env MB_SITE_NAME }}"
+    site-locale: en
+    allow-tracking: false
+  users:
+    - first_name: Admin
+      last_name: User
+      email: "{{ env MB_ADMIN_EMAIL }}"
+      password: "{{ env MB_ADMIN_PASSWORD }}"
+      is_superuser: true
+  api-keys:
+    - name: Automation Admin Key
+      creator: "{{ env MB_ADMIN_EMAIL }}"
+      group: admin
+      key: "{{ env MB_AUTOMATION_API_KEY }}"
+  databases:
+    - name: sample_dwh
+      engine: postgres
+      details:
+        host: sample-dwh
+        port: 5432
+        user: metabase_reader
+        password: "{{ env SAMPLE_DWH_METABASE_ROLE_PASSWORD }}"
+        dbname: "{{ env SAMPLE_DWH_DB }}"
+        ssl: false
