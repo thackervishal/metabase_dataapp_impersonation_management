@@ -5,14 +5,14 @@
 -- deployment should own these functions with a narrower, dedicated role
 -- instead of the superuser).
 
-create table rbac_control.role_commands (
+create table fine_grained_access.command_role (
   id bigserial primary key,
   role_name text not null,
   action text not null check (action in ('create', 'drop')),
   requested_at timestamptz not null default now()
 );
 
-create or replace function rbac_control.apply_role_command() returns trigger
+create or replace function fine_grained_access.apply_role_command() returns trigger
 language plpgsql security definer as $$
 begin
   if new.action = 'create' then
@@ -26,12 +26,12 @@ begin
 end;
 $$;
 
-create trigger role_commands_apply
-before insert on rbac_control.role_commands
-for each row execute function rbac_control.apply_role_command();
+create trigger command_role_apply
+before insert on fine_grained_access.command_role
+for each row execute function fine_grained_access.apply_role_command();
 
 
-create table rbac_control.user_commands (
+create table fine_grained_access.command_user (
   id bigserial primary key,
   user_name text not null,
   password text,
@@ -39,7 +39,7 @@ create table rbac_control.user_commands (
   requested_at timestamptz not null default now()
 );
 
-create or replace function rbac_control.apply_user_command() returns trigger
+create or replace function fine_grained_access.apply_user_command() returns trigger
 language plpgsql security definer as $$
 begin
   if new.action = 'create' then
@@ -53,12 +53,12 @@ begin
 end;
 $$;
 
-create trigger user_commands_apply
-before insert on rbac_control.user_commands
-for each row execute function rbac_control.apply_user_command();
+create trigger command_user_apply
+before insert on fine_grained_access.command_user
+for each row execute function fine_grained_access.apply_user_command();
 
 
-create table rbac_control.grant_commands (
+create table fine_grained_access.command_grant (
   id bigserial primary key,
   schema_name text not null,
   table_name text not null,
@@ -68,7 +68,7 @@ create table rbac_control.grant_commands (
   requested_at timestamptz not null default now()
 );
 
-create or replace function rbac_control.apply_grant_command() returns trigger
+create or replace function fine_grained_access.apply_grant_command() returns trigger
 language plpgsql security definer as $$
 begin
   -- Privilege feeds into the DDL text directly (it's a keyword, not an
@@ -88,12 +88,12 @@ begin
 end;
 $$;
 
-create trigger grant_commands_apply
-before insert on rbac_control.grant_commands
-for each row execute function rbac_control.apply_grant_command();
+create trigger command_grant_apply
+before insert on fine_grained_access.command_grant
+for each row execute function fine_grained_access.apply_grant_command();
 
 
-create table rbac_control.membership_commands (
+create table fine_grained_access.command_membership (
   id bigserial primary key,
   user_name text not null,
   role_name text not null,
@@ -101,7 +101,7 @@ create table rbac_control.membership_commands (
   requested_at timestamptz not null default now()
 );
 
-create or replace function rbac_control.apply_membership_command() returns trigger
+create or replace function fine_grained_access.apply_membership_command() returns trigger
 language plpgsql security definer as $$
 begin
   if new.action = 'add' then
@@ -115,6 +115,6 @@ begin
 end;
 $$;
 
-create trigger membership_commands_apply
-before insert on rbac_control.membership_commands
-for each row execute function rbac_control.apply_membership_command();
+create trigger command_membership_apply
+before insert on fine_grained_access.command_membership
+for each row execute function fine_grained_access.apply_membership_command();

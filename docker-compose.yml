@@ -32,13 +32,7 @@ services:
       retries: 12
 
   metabase:
-    build:
-      context: ../metabase
-      additional_contexts:
-        metabase_git: ../metabase/.git
-      args:
-        MB_EDITION: ee
-        VERSION: v1.64.0-data-apps-local
+    image: metabase/metabase-enterprise:${MB_IMAGE_TAG:-v1.64.x}
     environment:
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: ${MB_APP_DB_NAME}
