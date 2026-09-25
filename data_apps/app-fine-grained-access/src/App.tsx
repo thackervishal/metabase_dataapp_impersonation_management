@@ -2,29 +2,26 @@ import {
   useAction,
   useMetabaseQuery,
 } from "@metabase/embedding-sdk-react/data-app";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import "./app.css";
-import { CreateGrant } from "../actions/grants.action";
-import { CreateMembership } from "../actions/memberships.action";
-import { CreateRoleCommand } from "../actions/roles.action";
+import { CreateBatch } from "../actions/batch.action";
 import { Grants } from "../queries/grants.query";
+import { LatestBatch } from "../queries/latest-batch.query";
 import { Memberships } from "../queries/memberships.query";
 import { Roles } from "../queries/roles.query";
 import { SchemaTree } from "../queries/schema-tree.query";
 import { ApplyBar } from "./components/ApplyBar";
+import { LastSave } from "./components/LastSave";
 import { ManageRolesTab } from "./components/ManageRolesTab";
 import { MappingsTab } from "./components/MappingsTab";
 import { PermissionsTab } from "./components/PermissionsTab";
 import { TabBar } from "./components/Tabs";
 import { ROLE_PREFIX, buildAccess, buildMappings } from "./lib/access";
 import type { Grant, Membership, Role } from "./lib/access";
-import {
-  addChange,
-  applyChanges,
-  describeChange,
-  removeChange,
-} from "./lib/changes";
+import { parseOutcomes, toWire } from "./lib/batch";
+import type { BatchRecord } from "./lib/batch";
+import { addChange, applyChanges, removeChange } from "./lib/changes";
 import type { Change, RoleKind } from "./lib/changes";
 import type { Editing, Model, Node } from "./lib/nodes";
 import schema from "./metabase.data";
@@ -35,6 +32,7 @@ const roleFields = schema.tables.vRoles.fields;
 const grantFields = schema.tables.vGrants.fields;
 const membershipFields = schema.tables.vMemberships.fields;
 const treeFields = schema.tables.vSchemaTree.fields;
+const batchFields = schema.tables.vBatches.fields;
 
 type TabName = "permissions" | "mappings" | "manage";
 
@@ -55,16 +53,18 @@ export default function App() {
   const grants = useMetabaseQuery(Grants);
   const memberships = useMetabaseQuery(Memberships);
   const tree = useMetabaseQuery(SchemaTree);
+  const latest = useMetabaseQuery(LatestBatch);
 
-  const createGrant = useAction(CreateGrant);
-  const createMembership = useAction(CreateMembership);
-  const createRoleCommand = useAction(CreateRoleCommand);
+  const createBatch = useAction(CreateBatch);
 
   const [tab, setTab] = useState<TabName>("permissions");
   // Changes people have asked for. Nothing runs until they press Apply.
   const [pending, setPending] = useState<Change[]>([]);
   const [applying, setApplying] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // A save whose result we haven't seen yet: what we sent, and the newest batch before it.
+  const inflight = useRef<{ payload: string; previousId: number } | null>(null);
 
   // Only the first load replaces the screen with "Loading…". A reload after a change
   // must not, or the tabs would unmount and forget what you had selected.
@@ -73,11 +73,13 @@ export default function App() {
     roles.isLoading ||
     grants.isLoading ||
     memberships.isLoading ||
-    tree.isLoading;
+    tree.isLoading ||
+    latest.isLoading;
   if (!isLoading) {
     loadedOnce.current = true;
   }
-  const error = roles.error ?? grants.error ?? memberships.error ?? tree.error;
+  const error =
+    roles.error ?? grants.error ?? memberships.error ?? tree.error ?? latest.error;
 
   const roleList: Role[] = (roles.data?.rows ?? []).map((row) => ({
     name: String(row[roleFields.roleName.name]),
@@ -107,73 +109,91 @@ export default function App() {
     ];
   }
 
-  // Run one queued change by calling the matching action.
-  async function run(change: Change) {
-    if (change.kind === "grant") {
-      // "*" means every table in the schema; the database node does that for each schema.
-      const targets =
-        change.node.level === "table"
-          ? [{ schema: change.node.schema, table: change.node.table }]
-          : (change.node.level === "schema"
-              ? [change.node.schema]
-              : Object.keys(tables)
-            ).map((schemaName) => ({ schema: schemaName, table: "*" }));
-      for (const target of targets) {
-        await createGrant.execute({
-          schema_name: target.schema,
-          table_name: target.table,
-          role_name: change.role,
-          privilege: "SELECT",
-          should_grant: change.grant,
-        });
+  // The database's own record of the latest save.
+  const latestRow = latest.data?.rows[0];
+  const latestBatch: BatchRecord | null = latestRow
+    ? {
+        id: Number(latestRow[batchFields.batchId.name]),
+        requestedAt: String(latestRow[batchFields.requestedAt.name]),
+        status: String(latestRow[batchFields.status.name]),
+        errorMessage: latestRow[batchFields.errorMessage.name]
+          ? String(latestRow[batchFields.errorMessage.name])
+          : null,
+        changes: String(latestRow[batchFields.changes.name]),
+        outcomes: parseOutcomes(latestRow[batchFields.results.name]),
       }
-    } else if (change.kind === "membership") {
-      await createMembership.execute({
-        user_name: change.member,
-        role_name: change.role,
-        action: change.add ? "add" : "remove",
-      });
-    } else {
-      await createRoleCommand.execute({
-        role_name: change.role,
-        action:
-          change.kind === "dropRole"
-            ? "drop"
-            : change.roleKind === "person"
-              ? "create_person"
-              : "create_functional",
-      });
-    }
-  }
+    : null;
 
-  // Run the queue in order. It stops at the first change the database refuses and keeps
-  // that change and everything after it queued, so nothing is lost. Whatever ran is
-  // reloaded either way; the screens work out access from the loaded data, so reloading
-  // redraws everything, including access that comes through a role.
+  // If a save's response never reached us (a network error, say), the database's record
+  // still tells us what happened. When a newer batch appears that holds exactly what we
+  // sent, use its status. This is what makes a lost response safe.
+  const latestId = latestBatch?.id;
+  useEffect(() => {
+    const sent = inflight.current;
+    if (
+      !sent ||
+      !latestBatch ||
+      latestBatch.id <= sent.previousId ||
+      latestBatch.changes !== sent.payload
+    ) {
+      return;
+    }
+    inflight.current = null;
+    if (latestBatch.status === "applied") {
+      setPending([]);
+      setSaveError(null);
+      setNotice("The save went through. The database recorded it as applied and verified.");
+    } else {
+      setSaveError(
+        `Nothing was changed. ${latestBatch.errorMessage ?? "The database refused the batch."}`,
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestId]);
+
+  // Send the whole queue as one batch. The database applies every change in one transaction
+  // and checks each one, so the result is all or nothing, and it comes back in the row it
+  // wrote. On failure the queue stays, so nothing is lost.
   async function apply() {
-    const queue = pending;
-    let done = 0;
+    const wire = pending.flatMap((change) => toWire(change, tables));
+    const payload = JSON.stringify(wire);
+    inflight.current = { payload, previousId: latestBatch?.id ?? 0 };
     setApplying(true);
     setSaveError(null);
+    setNotice(null);
     try {
-      for (const change of queue) {
-        await run(change);
-        done += 1;
+      const response = await createBatch.execute({ changes: payload });
+      const created = (
+        response as { "created-row"?: Record<string, unknown> } | null
+      )?.["created-row"];
+
+      if (created?.status === "applied") {
+        inflight.current = null;
+        setPending([]);
+        setNotice(
+          `Saved. The database applied and verified ${wire.length} ${wire.length === 1 ? "change" : "changes"}.`,
+        );
+      } else if (created?.status === "failed") {
+        inflight.current = null;
+        setSaveError(
+          `Nothing was changed. ${String(created.error_message ?? "The database refused the batch.")}`,
+        );
+      } else {
+        setSaveError("Couldn't confirm the result. See Last save for what the database recorded.");
       }
     } catch (failure) {
-      const failed = queue[done];
+      // The request may or may not have reached the database. The reload below picks up
+      // its record, and the effect above settles it.
       setSaveError(
-        `Change ${done + 1} of ${queue.length} failed` +
-          (failed ? ` (${describeChange(failed, databaseName)})` : "") +
-          `: ${describeError(failure)}`,
+        `Couldn't confirm the result (${describeError(failure)}). See Last save for what the database recorded.`,
       );
     } finally {
       await Promise.all([
         roles.refetch(),
         grants.refetch(),
         memberships.refetch(),
+        latest.refetch(),
       ]);
-      setPending(queue.slice(done));
       setApplying(false);
     }
   }
@@ -205,6 +225,7 @@ export default function App() {
     discard: () => {
       setPending([]);
       setSaveError(null);
+      setNotice(null);
     },
     apply: () => void apply(),
   };
@@ -247,6 +268,14 @@ export default function App() {
             </button>
           </div>
         )}
+        {notice && (
+          <div className="banner banner--ok" role="status">
+            <span>{notice}</span>
+            <button type="button" onClick={() => setNotice(null)}>
+              Dismiss
+            </button>
+          </div>
+        )}
 
         <TabBar options={TABS} value={tab} onChange={setTab} />
 
@@ -270,6 +299,7 @@ export default function App() {
             <div hidden={tab !== "manage"}>
               <ManageRolesTab model={model} />
             </div>
+            <LastSave batch={latestBatch} />
           </>
         )}
 

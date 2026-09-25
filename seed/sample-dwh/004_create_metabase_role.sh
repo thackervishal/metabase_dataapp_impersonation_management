@@ -13,9 +13,9 @@ psql -v ON_ERROR_STOP=1 --username postgres --dbname "$POSTGRES_DB" \
   grant select on all tables in schema public, staging, analytics to metabase_reader;
   grant select on fine_grained_access.v_schema_tree, fine_grained_access.v_roles,
     fine_grained_access.v_grants, fine_grained_access.v_memberships to metabase_reader;
+  grant select on fine_grained_access.v_batches to metabase_reader;
 
   -- SELECT is needed too: Metabase only syncs (and builds models over) tables its user can read.
-  grant select, insert on fine_grained_access.command_role,
-    fine_grained_access.command_grant, fine_grained_access.command_membership to metabase_reader;
+  grant select, insert on fine_grained_access.command_batch to metabase_reader;
   grant usage on all sequences in schema fine_grained_access to metabase_reader;
 EOSQL

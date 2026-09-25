@@ -418,3 +418,10 @@ run as the impersonated role and will fail unless that role can `INSERT` into th
   affected and needs the role name typed. Open question, answered in chat but not built: recording each
   command's status in its row. In one transaction a failed statement rolls the whole insert back, so failure
   can't be recorded without catching the error in a PL/pgSQL EXCEPTION block and writing status = 'failed'.
+- 2026-09-25 (batch): Replaced the three command tables with one, `command_batch`. Apply now sends the whole
+  queue as one row; a trigger applies each change in one transaction, verifies each in the system catalog,
+  and records `applied` or `failed` (with per-change results and the SQL run) in the same row, so a change
+  either fully happens or not at all, and the record survives a page reload (the "Last save" section reads
+  `v_batches`). Verified: success, failure with full rollback, malformed input, forged status, a 174 KB
+  batch, and the flow through the app's copied action. The old command tables, triggers, and models are
+  retired. Known caveat: regenerating the typed schema after a build suffixes duplicated model names.
