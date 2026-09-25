@@ -4,4 +4,5 @@
 -- person role the impersonating connection user should be able to become
 -- (the v2 "create person" trigger should do it automatically).
 
-grant alice, bob, carol, dave, erin, frank to metabase_reader with inherit false, set true;
+grant imp_pr_rl_alice, imp_pr_rl_bob, imp_pr_rl_carol, imp_pr_rl_dave, imp_pr_rl_erin, imp_pr_rl_frank
+  to metabase_reader with inherit false, set true;
