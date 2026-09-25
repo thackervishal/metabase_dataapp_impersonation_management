@@ -11,8 +11,8 @@ Build a small web app that runs **inside Metabase** (a "data app") and lets an a
 
 - **v1 (read-only):** show every Postgres role, the privileges each role has on every table
   (schema → table tree), and which roles are members of which.
-- **v1.1 (effective access):** for a person, show what they can actually do through their role memberships,
-  and which role each privilege comes from (needs a new `v_effective_grants` view; see B6.1).
+- **v1.1 (per-person summary):** for a person, show what they can actually do, split into what they hold
+  directly and what each functional role gives them (see B6.1).
 - **v2 (editing):** create/drop roles, create/drop login users, grant/revoke table privileges, add/remove
   role memberships.
 
@@ -64,7 +64,7 @@ The `init` commit already contains a first draft of Part A (nothing has been run
 | File | What it does | Status |
 |---|---|---|
 | `docker-compose.yml` | `app-db` (Metabase's DB), `sample-dwh` (Postgres 16), `metabase` (image `metabase/metabase-enterprise:v1.64.x`, floating) | untested |
-| `seed/sample-dwh/001_seed.sql` | `analytics` and `sales` schemas with sample rows | untested |
+| `seed/sample-dwh/001_seed.sql` | The demo warehouse: 104 tables in `public`, `staging`, and `analytics` (see DATA_APPS_101.md) | loaded, verified |
 | `seed/sample-dwh/002_fine_grained_access_reads.sql` | views `v_schema_tree`, `v_roles` (`role_kind` person/functional, read from the role comment), `v_grants`, `v_memberships` (`member_name`, `role_name`); hides superusers, `pg_*` and `metabase_reader` | fixed and verified (A2 done) |
 | `seed/sample-dwh/005_demo_roles.sql` | demo functional roles `sales`/`finance`/`hr` and people alice..frank (bob and erin have two roles), all NOLOGIN, kind stored as a role comment; some grants | loaded, verified |
 | `seed/sample-dwh/006_demo_impersonation.sql` | `grant <person> to metabase_reader with inherit false, set true` so Metabase can `SET ROLE` to each person | loaded, verified |
@@ -139,6 +139,11 @@ tables whose owner never explicitly granted anything.)
 - **Protect reserved roles inside the trigger, not just the UI.** Anyone holding `INSERT` on a command
   table bypasses the UI, so the trigger is the real security boundary. Reject any command that targets
   `postgres`, `metabase_reader`, superusers, or `pg_*` roles.
+- **Every role starts with `imp_fn_rl_` (functional) or `imp_pr_rl_` (person)**: imp = impersonation, fn =
+  functional, pr = person, rl = role. The prefix also says the kind, so no role comment is stored. The views
+  show only roles with a prefix, and the command triggers call `require_managed_role()` first, so the app
+  can't create, drop, grant to, or add members to any other role. Names are capped at 63 characters, the
+  Postgres limit, because Postgres silently cuts longer ones. Done and verified, including the limit.
 - **People never log in.** Metabase impersonates a person by running `SET ROLE <person>` (Postgres driver),
   so every role is `NOLOGIN` and person roles need no password at all. That simplifies `command_user`:
   "create person" = `create role <name> nologin` + `comment on role <name> is 'person'`, and it must also
@@ -268,40 +273,80 @@ You do **not** need Library collections, metrics, measures or segments (the "sem
 docs); the `database=` scope reads plain tables. Fallback if the views are missing from the schema:
 publish them into the Data library in Data Studio and use `include-data-library=true`.
 
-### B6. v1 build (read-only), in small steps
-Each step ends with something you can see in the browser preview.
+### B5.1. Target screen (end state, 2026-09-24)
 
-1. **Roles list.** In `queries/roles.query.ts`: `export const Roles = defineQuery({ source: schema.tables.v_roles })`.
-   In `App.tsx`: `const { data, isLoading, error } = useMetabaseQuery(Roles)`. Render a list; show a
-   spinner while `isLoading` and the error text on `error`. *Learn:* hooks, loading/error states, rows are
-   objects keyed by column name (`row.role_name`), never arrays.
-2. **Select a role.** `const [selectedRole, setSelectedRole] = useState<string | null>(null)`; clicking a
-   role sets it. *Learn:* state, event handlers, lifting state up to `App`.
-3. **Grants for the selected role.** Query `v_grants`; pass the runtime `role_name` filter in the hook's
-   **second argument** (`useMetabaseQuery(Grants, { filters: [filter(...roleName, "=", selectedRole)] })`).
-   The first argument must be identical on every render; only the second may depend on state.
-4. **Permission grid.** Load `v_schema_tree` (all tables). Render schema headings, one row per table,
-   one column per privilege (SELECT, INSERT, UPDATE, DELETE, ...), a check where the selected role's grants
-   include it. Build a `Set` of `"schema.table.privilege"` strings from step 3 for O(1) lookups.
-   Also show a "via PUBLIC" indication if `v_grants` has `PUBLIC` rows.
-5. **Memberships.** Query `v_memberships`; for the selected role show "members of this role" and "roles
-   this role belongs to" as two small lists.
-6. **Polish.** Empty states ("this role has no grants"), sensible default (first role selected on load),
-   `minHeight: 100vh` on the root element. Run `npm run typecheck`.
+The app manages `SELECT` on tables and nothing else. No role created here gets any other privilege.
 
-Row-cap check: confirm how many rows a query returns by default (grants can be numerous); add a `limit`
-or filter if the result is truncated. Verify this rather than assuming.
+```
+ Tree                      analytics.events
 
-### B6.1. v1.1: effective access (after v1 works)
-`v_grants` shows only **direct** grants. A person like `alice` has none of her own; her access comes from
-`sales`. v1.1 answers "what can this person actually do, and through which role?":
-1. Add `fine_grained_access.v_effective_grants` (schema, table, privilege, **person**, **via_role**). Postgres
-   memberships can nest and, since PG16, each membership has its own `inherit` flag, so use a recursive
-   query over `pg_auth_members` and respect that flag. Verify against Postgres itself with
-   `has_table_privilege(person, table, privilege)` for a few cases (bob has two roles; frank has none).
-2. Re-sync the database schema in Metabase so the new view appears, then regenerate `metabase.data.ts` (B5).
-3. In the UI, when a person is selected, show their effective privileges with a "via `sales`" label per
-   row; when a functional role is selected, keep the direct grants view from B6.
+ ▾ analytics               Functional roles
+     daily_metrics           [x] hr
+     events   <selected>     [ ] finance
+ ▾ sales                     [ ] sales
+     customers             People
+     order_items             [ ] dave     through hr     <- grey check, not clickable
+     orders                  [x] erin
+                             [ ] alice
+```
+
+**How it reads.** The left side is a tree of schemas and tables. Selecting a node opens the right panel:
+the functional roles first, then the people, each with a checkbox that answers "can this role read this node?".
+
+**Four checkbox states, so a person's real access is visible at a glance:**
+
+| State | Meaning | Editable in v2 |
+| --- | --- | --- |
+| Solid blue check | Granted to this role itself | Yes: click to revoke |
+| Grey ring with a check | Inherited from a functional role the person belongs to (hover shows which) | No: change the functional role instead |
+| Half-filled ring (schemas and the database) | The role can read some of the tables underneath | Yes |
+| Empty ring | No access | Yes: click to grant |
+
+**The schema node.** Its checkbox summarizes its tables: filled if the role can read all of them, partly
+filled if some, empty if none. In v2, checking it runs `USAGE` on the schema and `SELECT` on each table that
+exists at that moment. The tables underneath then show the result.
+
+**Data it needs.** `v_schema_tree` (tree), `v_roles` (both role lists), `v_grants` (direct `SELECT` grants),
+and `v_memberships` (who is in what). The app follows memberships through other roles on the client, in
+`src/lib/access.ts`. At this size it loads everything once. On a large warehouse, load per selected node.
+
+**Build order.** v1 draws the whole screen read-only, including the grey states. v2 turns on the clicks for
+the filled, partly filled, and empty states and leaves the grey ones locked.
+
+**Decided:** SELECT only, so no privilege picker; a grey check with "through <role>" (not an asterisk) for
+inherited access; checking a schema grants `USAGE` plus `SELECT` on its current tables.
+
+**TODO (later, separate project):**
+- Tables created after a schema was granted are not covered. Options include default privileges, or a
+  scheduled re-grant.
+- Show schema-level `USAGE` on the screen. Today a role can look like it reads a table it can't reach
+  because it lacks `USAGE` on the schema.
+- Grants to `PUBLIC` (everyone) are ignored by the screen.
+- Verify the inheritance rules in `src/lib/access.ts` for the PG16 per-membership `inherit` option. The
+  screen assumes the default (inherit on).
+
+### B6. v1 build (read-only): done
+
+Built as one screen rather than the step-by-step pieces first drafted here. `DATA_APPS_101.md` explains each
+piece. What exists:
+
+1. **Four queries** in `queries/`: roles, grants (`SELECT` only), memberships, and the schema tree. Each is
+   called once, in `App.tsx`, and the results are passed down as props.
+2. **`src/lib/access.ts`:** the rules for direct and inherited access, checked against Postgres's
+   `has_table_privilege()` for every demo person.
+3. **Two tabs.** Permissions has a switch between "By object" (tree, then roles) and "By role" (roles, then tree). Role Mapping has "By role" and "By person". Components: `SchemaTree`, `AccessPanel`, `RoleList`, `PermissionsTab`, `RoleMappingTab`, `AccessMark`, and `Tabs`. State lives in each tab, and both tabs stay mounted.
+
+Still to check: how many rows a query returns by default. The demo is tiny, but grants can be numerous, so
+add a `limit` or a filter if a result is truncated. Verify this rather than assuming.
+
+Preview it from `data_apps/app-fine-grained-access/` with `npm run dev`.
+
+### B6.1. v1.1: per-person summary (mostly delivered)
+
+The "What a role can access" view already shows, for a selected person, the whole tree with grey rings for
+access that comes through functional roles, and the Role Mapping tab shows which roles a person is in. What's
+left is optional: a plain two-part list for a selected person, "held directly" and "from each functional
+role", if the tree view isn't enough.
 
 ### B7. Ship v1
 1. `npm run build` (runs `sync-resources`, then bundles to `dist/index.js`). Commit the source,
@@ -313,7 +358,7 @@ or filter if the result is truncated. Verify this rather than assuming.
 4. **Also test as a non-admin.** The dev preview (`npm run dev`) runs as the API key's user, so with an
    admin key it hides permission problems a real viewer would hit.
 
-### B8. v2 build (editing), one write at a time
+### B8. v2 build (editing), one write at a time (grant, revoke, and memberships are done)
 Add the writes in this order (each is one model action + one small form/button):
 
 1. **Grant/revoke privilege** (`command_grant`): make each cell in the permission grid a checkbox.
@@ -352,3 +397,24 @@ run as the impersonated role and will fail unless that role can `INSERT` into th
 - 2026-09-21: Draft of Part A files committed in `init` but unverified. Scope narrowed to the Postgres side
   only (no Metabase-user-to-role mapping). Plan rewritten with step-level detail; added Step 0 (token/image),
   `v_grants` fix, trigger hardening, and portability notes.
+- 2026-09-25: Demo warehouse grown to 104 tables (`public`, `staging`, `analytics`). Edit mode built for
+  grants and memberships: `command_grant` now allows only SELECT, and `table_name = '*'` grants or
+  revokes every table in a schema plus USAGE. Two actions (`CreateGrant`, `CreateMembership`) run through
+  the app's copied models; verified end to end, including the Postgres error path. UI now says "database
+  role" and "database object" throughout. Still to do: create and drop database roles, the
+  create-person trigger, and the TODOs under B5.1.
+- 2026-09-25 (later): Replaced the immediate-save Edit mode with a queue and an Apply bar. Added the
+  Database Roles tab with add and delete database role panels (`command_role` actions are now
+  `create_person`, `create_functional`, and `drop`; the trigger sets the kind comment, lets the connection
+  role SET ROLE to new people, and revokes everything before dropping). Open idea, not built: show the SQL a
+  change runs. Two feasible routes: generate the same statement text in the app as a preview before Apply, and
+  add an `executed_sql` column that the trigger fills, which the action's returned row would then carry back.
+- 2026-09-25 (later still): Prefixes changed to `imp_fn_rl_` and `imp_pr_rl_`; kind now comes from the prefix, not a
+  role comment. 63-character limit enforced in the form and the trigger. Deleting a role needs its full name
+  typed. `command_user` retired: table and trigger dropped, its Metabase model archived (recoverable from the
+  trash). The plan's older `command_user` notes above no longer apply.
+- 2026-09-25 (later still): Three tabs now: Permissions, Database Role Mappings (membership editing), and
+  Manage Database Roles (list with Delete, and an Add button that opens a dialog). Deleting shows who is
+  affected and needs the role name typed. Open question, answered in chat but not built: recording each
+  command's status in its row. In one transaction a failed statement rolls the whole insert back, so failure
+  can't be recorded without catching the error in a PL/pgSQL EXCEPTION block and writing status = 'failed'.

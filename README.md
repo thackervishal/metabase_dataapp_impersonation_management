@@ -2,7 +2,7 @@
 
 A single-purpose repo: a small local stack (Metabase EE + Postgres warehouse with an `fine_grained_access`
 schema) **and** the data app that manages the warehouse's Postgres roles and grants.
-See [PLAN.md](PLAN.md) for the full design and current status.
+See [PLAN.md](PLAN.md) for the full design and current status, and [DATA_APPS_101.md](DATA_APPS_101.md) for a file-by-file guide aimed at people new to data apps.
 
 ## Quick start
 

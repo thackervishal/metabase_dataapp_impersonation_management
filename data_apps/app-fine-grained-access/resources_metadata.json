@@ -1,6 +1,64 @@
 {
-  "queries": [],
-  "models": [],
-  "metrics": [],
-  "collectionId": 8
+  "collectionId": 8,
+  "queries": [
+    {
+      "tableId": 224,
+      "hash": "v1:sha256:acc52dd3e3bb72f801de736b4de1d9974da5783afb91320b749f2e743a22fb2f",
+      "savedQuestionSourceId": 137
+    },
+    {
+      "tableId": 225,
+      "hash": "v1:sha256:6fd7cb9ce6a7c775ee014a007a517e7831b2c065e809f26ce9401cdc282fbc4a",
+      "savedQuestionSourceId": 138
+    },
+    {
+      "tableId": 226,
+      "hash": "v1:sha256:b4c6f0d392bd26c1bb9ead75d98f895fb12318193d99bd46db548a197ad3f805",
+      "savedQuestionSourceId": 139
+    },
+    {
+      "tableId": 227,
+      "hash": "v1:sha256:456b688f44ba6371e16265aa605fbd4c1d4cc326d8cd12d5bd3df0a20fb191a6",
+      "savedQuestionSourceId": 140
+    }
+  ],
+  "models": [
+    {
+      "sourceModelId": 133,
+      "copiedModelId": 141,
+      "hash": "v1:sha256:93ee3e6933fd6ec345095ab809c18400b4c5bc4a2cb68659cff8d803e7a98793",
+      "actions": [
+        {
+          "sourceActionId": 3,
+          "copiedActionId": 13,
+          "hash": "v1:sha256:8ebfb7233198dc848ef8913cc41d38e118ae8984932d7b71f22746b692fe2d7d"
+        }
+      ]
+    },
+    {
+      "sourceModelId": 134,
+      "copiedModelId": 142,
+      "hash": "v1:sha256:fb5b18c91e9b0bd856d97a43226f0a8039dbc6b95141cfde1d190f217bc330ff",
+      "actions": [
+        {
+          "sourceActionId": 6,
+          "copiedActionId": 14,
+          "hash": "v1:sha256:eebc62daff39f5654f0d4f85d735cd817aaf90c30169f46c48b52874de119b7f"
+        }
+      ]
+    },
+    {
+      "sourceModelId": 135,
+      "copiedModelId": 143,
+      "hash": "v1:sha256:6d5ef96f949ad125c4035c6f9cf0a6beb7e27739b5e4a0caa4939feabe263375",
+      "actions": [
+        {
+          "sourceActionId": 9,
+          "copiedActionId": 15,
+          "hash": "v1:sha256:2a5e5daddc620334c9a7030424ac80e0ada8f0b3814098edd50f32c7889feabb"
+        }
+      ]
+    }
+  ],
+  "metrics": []
 }
