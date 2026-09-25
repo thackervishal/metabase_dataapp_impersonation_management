@@ -1,5 +1,6 @@
 import { describeChange } from "../lib/changes";
 import type { Editing } from "../lib/nodes";
+import { describeValues } from "../lib/policies";
 
 // Shows the queued changes and the buttons that run or throw them away.
 // It only appears when something is queued, and stays at the bottom of the window.
@@ -36,6 +37,21 @@ export function ApplyBar({
             </li>
           ))}
         </ol>
+        {editing.removedPolicies.length > 0 && (
+          <div className="apply-note">
+            This also removes {editing.removedPolicies.length} row{" "}
+            {editing.removedPolicies.length === 1 ? "policy" : "policies"}, because their database role
+            is being deleted or no longer has access to the table:
+            <ul className="plain-list">
+              {editing.removedPolicies.map((policy) => (
+                <li key={policy.name}>
+                  {policy.role} on {policy.schema}.{policy.table} where {policy.column} is one of:{" "}
+                  {describeValues(policy.values)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </details>
 
       <div className="apply-actions">

@@ -4391,6 +4391,7 @@ const tables = {
     name: "Hr Employees Wide",
     fields: {
       // Display name: Department Name
+      // Semantic type: type/Category
       departmentName: {
         type: "column",
         name: "department_name",
@@ -4401,6 +4402,7 @@ const tables = {
         baseType: "type/Text"
       },
       // Display name: Email
+      // Semantic type: type/Email
       email: {
         type: "column",
         name: "email",
@@ -4421,6 +4423,7 @@ const tables = {
         baseType: "type/BigInteger"
       },
       // Display name: Employment Type
+      // Semantic type: type/Category
       employmentType: {
         type: "column",
         name: "employment_type",
@@ -4431,6 +4434,7 @@ const tables = {
         baseType: "type/Text"
       },
       // Display name: Full Name
+      // Semantic type: type/Name
       fullName: {
         type: "column",
         name: "full_name",
@@ -4461,6 +4465,7 @@ const tables = {
         baseType: "type/Boolean"
       },
       // Display name: Job Title
+      // Semantic type: type/Title
       jobTitle: {
         type: "column",
         name: "job_title",
@@ -4471,6 +4476,7 @@ const tables = {
         baseType: "type/Text"
       },
       // Display name: Location Name
+      // Semantic type: type/Category
       locationName: {
         type: "column",
         name: "location_name",
@@ -4481,6 +4487,7 @@ const tables = {
         baseType: "type/Text"
       },
       // Display name: Manager Name
+      // Semantic type: type/Category
       managerName: {
         type: "column",
         name: "manager_name",
@@ -7800,6 +7807,7 @@ const tables = {
     name: "Sales Orders Wide",
     fields: {
       // Display name: Channel Name
+      // Semantic type: type/Source
       channelName: {
         type: "column",
         name: "channel_name",
@@ -7810,6 +7818,7 @@ const tables = {
         baseType: "type/Text"
       },
       // Display name: Country Name
+      // Semantic type: type/Country
       countryName: {
         type: "column",
         name: "country_name",
@@ -7820,6 +7829,7 @@ const tables = {
         baseType: "type/Text"
       },
       // Display name: Currency Code
+      // Semantic type: type/Category
       currencyCode: {
         type: "column",
         name: "currency_code",
@@ -7850,6 +7860,7 @@ const tables = {
         baseType: "type/Text"
       },
       // Display name: Customer Segment
+      // Semantic type: type/Category
       customerSegment: {
         type: "column",
         name: "customer_segment",
@@ -7860,6 +7871,7 @@ const tables = {
         baseType: "type/Text"
       },
       // Display name: Discount Amount
+      // Semantic type: type/Discount
       discountAmount: {
         type: "column",
         name: "discount_amount",
@@ -7890,6 +7902,7 @@ const tables = {
         baseType: "type/BigInteger"
       },
       // Display name: Order Status
+      // Semantic type: type/Category
       orderStatus: {
         type: "column",
         name: "order_status",
@@ -7900,6 +7913,7 @@ const tables = {
         baseType: "type/Text"
       },
       // Display name: Region Name
+      // Semantic type: type/Category
       regionName: {
         type: "column",
         name: "region_name",
@@ -7910,6 +7924,7 @@ const tables = {
         baseType: "type/Text"
       },
       // Display name: Sales Rep Name
+      // Semantic type: type/Category
       salesRepName: {
         type: "column",
         name: "sales_rep_name",
@@ -8516,6 +8531,79 @@ const tables = {
   },
   // Database: sample_dwh
   // Schema: fine_grained_access
+  // Table: v_columns
+  vColumns: {
+    type: "table",
+    id: 334,
+    name: "V Columns",
+    fields: {
+      // Display name: Column Name
+      columnName: {
+        type: "column",
+        name: "column_name",
+        sourceName: "v_columns",
+        jsType: "string",
+        fieldId: 2966,
+        tableId: 334,
+        baseType: "type/Text"
+      },
+      // Display name: Data Type
+      // Semantic type: type/Category
+      dataType: {
+        type: "column",
+        name: "data_type",
+        sourceName: "v_columns",
+        jsType: "string",
+        fieldId: 2967,
+        tableId: 334,
+        baseType: "type/Text"
+      },
+      // Display name: Ordinal
+      ordinal: {
+        type: "column",
+        name: "ordinal",
+        sourceName: "v_columns",
+        jsType: "number",
+        fieldId: 2969,
+        tableId: 334,
+        baseType: "type/Integer"
+      },
+      // Display name: Schema Name
+      // Semantic type: type/Category
+      schemaName: {
+        type: "column",
+        name: "schema_name",
+        sourceName: "v_columns",
+        jsType: "string",
+        fieldId: 2964,
+        tableId: 334,
+        baseType: "type/Text"
+      },
+      // Display name: Table Name
+      tableName: {
+        type: "column",
+        name: "table_name",
+        sourceName: "v_columns",
+        jsType: "string",
+        fieldId: 2965,
+        tableId: 334,
+        baseType: "type/Text"
+      },
+      // Display name: Type Kind
+      // Semantic type: type/Category
+      typeKind: {
+        type: "column",
+        name: "type_kind",
+        sourceName: "v_columns",
+        jsType: "string",
+        fieldId: 2968,
+        tableId: 334,
+        baseType: "type/Text"
+      }
+    }
+  },
+  // Database: sample_dwh
+  // Schema: fine_grained_access
   // Table: v_grants
   vGrants: {
     type: "table",
@@ -8602,6 +8690,60 @@ const tables = {
   },
   // Database: sample_dwh
   // Schema: fine_grained_access
+  // Table: v_rls_tables
+  vRlsTables: {
+    type: "table",
+    id: 335,
+    name: "V Rls Tables",
+    fields: {
+      // Display name: Other Policy Count
+      // Semantic type: type/Quantity
+      otherPolicyCount: {
+        type: "column",
+        name: "other_policy_count",
+        sourceName: "v_rls_tables",
+        jsType: "number",
+        fieldId: 2973,
+        tableId: 335,
+        baseType: "type/Integer"
+      },
+      // Display name: Policy Count
+      // Semantic type: type/Quantity
+      policyCount: {
+        type: "column",
+        name: "policy_count",
+        sourceName: "v_rls_tables",
+        jsType: "number",
+        fieldId: 2972,
+        tableId: 335,
+        baseType: "type/Integer"
+      },
+      // Display name: Schema Name
+      // Semantic type: type/Category
+      schemaName: {
+        type: "column",
+        name: "schema_name",
+        sourceName: "v_rls_tables",
+        jsType: "string",
+        fieldId: 2970,
+        tableId: 335,
+        baseType: "type/Text"
+      },
+      // Display name: Table Name
+      // Semantic type: type/Category
+      tableName: {
+        type: "column",
+        name: "table_name",
+        sourceName: "v_rls_tables",
+        jsType: "string",
+        fieldId: 2971,
+        tableId: 335,
+        baseType: "type/Text"
+      }
+    }
+  },
+  // Database: sample_dwh
+  // Schema: fine_grained_access
   // Table: v_roles
   vRoles: {
     type: "table",
@@ -8628,6 +8770,106 @@ const tables = {
         jsType: "string",
         fieldId: 2232,
         tableId: 226,
+        baseType: "type/Text"
+      }
+    }
+  },
+  // Database: sample_dwh
+  // Schema: fine_grained_access
+  // Table: v_row_policies
+  vRowPolicies: {
+    type: "table",
+    id: 336,
+    name: "V Row Policies",
+    fields: {
+      // Display name: Definition
+      definition: {
+        type: "column",
+        name: "definition",
+        sourceName: "v_row_policies",
+        jsType: "string",
+        fieldId: 2982,
+        tableId: 336,
+        baseType: "type/Text"
+      },
+      // Display name: Filter Column
+      filterColumn: {
+        type: "column",
+        name: "filter_column",
+        sourceName: "v_row_policies",
+        jsType: "string",
+        fieldId: 2980,
+        tableId: 336,
+        baseType: "type/Text"
+      },
+      // Display name: Filter Values
+      filterValues: {
+        type: "column",
+        name: "filter_values",
+        sourceName: "v_row_policies",
+        jsType: "string",
+        fieldId: 2981,
+        tableId: 336,
+        baseType: "type/Text"
+      },
+      // Display name: Is Managed
+      isManaged: {
+        type: "column",
+        name: "is_managed",
+        sourceName: "v_row_policies",
+        jsType: "boolean",
+        fieldId: 2978,
+        tableId: 336,
+        baseType: "type/Boolean"
+      },
+      // Display name: Is Permissive
+      isPermissive: {
+        type: "column",
+        name: "is_permissive",
+        sourceName: "v_row_policies",
+        jsType: "boolean",
+        fieldId: 2979,
+        tableId: 336,
+        baseType: "type/Boolean"
+      },
+      // Display name: Policy Name
+      policyName: {
+        type: "column",
+        name: "policy_name",
+        sourceName: "v_row_policies",
+        jsType: "string",
+        fieldId: 2976,
+        tableId: 336,
+        baseType: "type/Text"
+      },
+      // Display name: Role Name
+      roleName: {
+        type: "column",
+        name: "role_name",
+        sourceName: "v_row_policies",
+        jsType: "string",
+        fieldId: 2977,
+        tableId: 336,
+        baseType: "type/Text"
+      },
+      // Display name: Schema Name
+      schemaName: {
+        type: "column",
+        name: "schema_name",
+        sourceName: "v_row_policies",
+        jsType: "string",
+        fieldId: 2974,
+        tableId: 336,
+        baseType: "type/Text"
+      },
+      // Display name: Table Name
+      tableName: {
+        type: "column",
+        name: "table_name",
+        sourceName: "v_row_policies",
+        jsType: "string",
+        fieldId: 2975,
+        tableId: 336,
         baseType: "type/Text"
       }
     }
@@ -8681,7 +8923,7 @@ const metrics = { } as const;
 
 const schema = {
   schemaVersion: 2,
-  generatedAt: "2026-09-25T19:00:42.695737158Z",
+  generatedAt: "2026-09-25T20:26:28.594855787Z",
   metabase: {
     instanceUrl: "http://localhost:3000"
   },

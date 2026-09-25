@@ -142,7 +142,7 @@ export function buildAccess(grants: Grant[], memberships: Membership[]) {
     };
   }
 
-  return { groupAccess, tableNodeAccess };
+  return { groupAccess, tableNodeAccess, ancestors };
 }
 
 export type Access = ReturnType<typeof buildAccess>;

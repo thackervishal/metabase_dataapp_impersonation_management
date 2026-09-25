@@ -37,6 +37,7 @@ Two things about how data apps behave surprised us:
 | `seed/sample-dwh/004_create_metabase_role.sh`        | Creates `metabase_reader` and its permissions                   | Edit rarely            |
 | `seed/sample-dwh/005_demo_roles.sql`                 | Demo roles, people, and grants                                  | Edit                   |
 | `seed/sample-dwh/006_demo_impersonation.sql`         | Lets `metabase_reader` switch to each person role               | Edit rarely            |
+| `seed/sample-dwh/007_demo_row_security.sql`          | Turns on row security for two demo tables and adds policies     | Edit                   |
 
 ### `data_apps/app-fine-grained-access/` (the app)
 
@@ -170,7 +171,7 @@ Preview it from the app folder with `npm run dev`, then open `http://localhost:5
 
 The app has two tabs, and each has a switch that turns the same data around.
 
-**The Permissions tab** answers "who can read what". The first view, **By database object**, shows a tree on the left with the database at the top, then its schemas, then their tables, each with an icon. Selecting a node lists every database role on the right, functional database roles first and then person database roles. The second view, **By database role**, flips it: pick a database role on the left and see the whole tree with an icon on every row showing what that role can read.
+**The Permissions tab** answers "who can read what". The first view, **By database role**, lets you pick a database role on the left and shows the whole tree with an icon on every row for what that role can read. The second view, **By database object**, flips it: a tree on the left with the database at the top, then its schemas, then their tables. Selecting a node lists every database role on the right, functional database roles first and then person database roles.
 
 **The Database Role Mappings tab** answers "who is in what". **By functional database role** lists the person database roles in one, and **By person database role** lists the functional database roles a person belongs to.
 
@@ -225,6 +226,34 @@ Nothing you click changes the database. A click queues a change, and the change 
 **Dialogs handle the keyboard on themselves.** The sandbox the app runs in blocks keyboard listeners on the whole document, so the dialog catches the Escape key on its own element instead, and focus starts inside it. Clicking the dim area around a dialog also closes it.
 
 **What it doesn't do yet.** Tables created after a schema was granted aren't covered, and we've left that for a separate project. The screen ignores grants to `PUBLIC` and doesn't show schema-level `USAGE`, so a database role could look like it has access to tables it can't reach.
+
+## Restrict rows with row security
+
+The **Row and Column Policies** tab uses Postgres row-level security. You turn it on for a table, then add policies that say which rows a database role can see.
+
+**A table with row security on is locked down.** A database role that can read the table still gets no rows until a policy lets it see some. So `select *` works and returns nothing. This is the safe default for a sensitive table: turning row security on can't leak anything.
+
+**Policies add up.** A policy says "this role sees the rows where this column is one of these values". If one policy lets a role see the US and another lets it see Canada, it sees both. That holds across roles too: a person sees the rows allowed by their own policies and by the policies on every functional role they belong to. Adding a policy can only show more rows, never fewer, and the tab says so where you add one. Restricting a role that already sees everything isn't possible here, because a role sees rows only through a policy.
+
+**The connection role sees everything, and people don't.** `metabase_reader` has `BYPASSRLS`, so Metabase can sync and scan every row. That attribute belongs to the role in effect, so it doesn't carry over when Metabase switches to a person with `SET ROLE`. We checked both: the connection role reads all 200 demo orders, and a person sees only what their policies allow.
+
+**A policy needs access first.** The role dropdown lists only database roles that can read the table, directly or through a functional role, and says why the others are missing. The database refuses a policy for any other role.
+
+**Losing access removes the policies.** When a database role can no longer read a table, whether from a revoke, leaving the functional role that granted it, or being deleted, its policies on that table are removed too. No orphan policy stays behind. Each batch ends by removing the policies of any role that no longer has access, and then checks that none are left. It judges the batch's final result, so a batch that revokes and grants the same access again keeps its policies. The removal is recorded as its own step in the audit history, and the Apply bar tells you beforehand: "This also removes 2 row policies". Deleting a role removes its policies in the same way. Granting access again later doesn't bring them back.
+
+**Turning row security off removes the app's policies first.** You type the table name to confirm, and the dialog lists what will go. Policies the app didn't create are left alone. The tab shows them as "not managed by this app", read-only, and they have no effect while row security is off.
+
+**The catalog is the record.** A policy the app creates is named `imp_rls_` plus a hash of its role, table, column, and values, so the same rule always gets the same name. The rule is also stored as JSON in the policy's comment, which `v_row_policies` reads back. Nothing about policies lives in the app. Values are written into the policy as quoted literals, so a value like `O'Brien'); drop table x; --` is stored as text and does nothing else.
+
+**Only "is one of" for now.** It works on text, number, and true/false columns, with up to 200 values, entered separated by commas. A rule is a column, an operator, and values, so operators such as between and is not one of can be added later without reshaping the screen.
+
+**The tab has two views.** *By table* shows the tables with row security on and, for the selected one, its policies and the database roles that can read it but see no rows. *By database role* is read-only. It lists, for one role, each locked-down table it can read and the policies that apply, marking the ones inherited from a functional role.
+
+**Hiding columns is not built.** The tab ends with a "Column policies: coming soon" panel. Postgres can't hide one column from a role that can read the whole table, so it needs a different approach.
+
+**Test the interactions, not just the buttons.** Roles, grants, memberships, and policies affect each other, so the checks that matter are the combinations. We ran a set against a throwaway database and compared what the app predicts for a queue with what the database did: revoking a table, regranting in the same or a later batch, removing someone from a role, revoking a whole schema, deleting functional and person roles, and turning row security off. The two matched in every case. We also fed the database bad input: empty and non-list values, unknown columns, columns of the wrong type, a role with no access, and a duplicate policy. Each failed with a clear message and rolled back.
+
+**Regenerating the schema.** The tab adds three views, `v_rls_tables`, `v_row_policies`, and `v_columns`. After they synced into Metabase, regenerating the typed schema produced the duplicate model names described above, so we kept the original `commandBatchModel` block and took only the new tables.
 
 ## Who can use the app
 

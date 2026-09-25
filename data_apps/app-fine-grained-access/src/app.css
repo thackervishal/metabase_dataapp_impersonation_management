@@ -82,12 +82,6 @@
   font-weight: 700;
 }
 
-.intro {
-  max-width: 760px;
-  margin: 0 0 24px;
-  color: var(--text-2);
-}
-
 .error {
   color: var(--danger);
   white-space: pre-wrap;
@@ -800,4 +794,166 @@ button.row.row--active {
 .audit-row .pending-list {
   max-height: none;
   padding-left: 40px;
+}
+
+/* The Row and Column Policies tab */
+
+.btn--block {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.row-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.row-line .row-action {
+  margin-left: 0;
+}
+
+.count {
+  margin-left: auto;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.policy {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.policy--pending {
+  border: 1px dashed var(--pending);
+}
+
+.policy-text {
+  min-width: 0;
+}
+
+.policy-rule {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.notice {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+}
+
+.notice .plain-list {
+  margin: 6px 0 0;
+}
+
+.role-table {
+  margin-bottom: 12px;
+}
+
+.coming-soon {
+  margin-top: 16px;
+}
+
+.coming-soon h2 {
+  margin-top: 0;
+}
+
+.apply-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.policy-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* A value that is shown but can't be changed */
+.input-group--readonly {
+  background: var(--bg-subtle);
+  color: var(--text-2);
+  cursor: not-allowed;
+}
+
+.input-group--readonly input {
+  color: var(--text-2);
+  cursor: not-allowed;
+}
+
+.input-group--readonly:focus-within {
+  border-color: var(--border);
+}
+
+/* The record of a save: one block per change */
+
+.batch-details {
+  padding: 4px 0 8px;
+}
+
+.batch-change {
+  position: relative;
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.batch-change .status {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  margin: 0;
+}
+
+.batch-fields {
+  margin: 0 0 10px;
+}
+
+.batch-fields div {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.batch-fields dt {
+  min-width: 110px;
+  color: var(--text-2);
+}
+
+.batch-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.sql-block {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.removed-policies {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.removed-policies li {
+  padding: 2px 0;
+  overflow-wrap: anywhere;
 }

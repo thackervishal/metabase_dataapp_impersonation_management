@@ -429,3 +429,14 @@ run as the impersonated role and will fail unless that role can `INSERT` into th
   dismissed. A fourth tab, Audit History, lists every recorded batch (newest first, latest 100) with the SQL
   for each. The app is admin-only, so there is nothing to set up for other people. Known gap: the record
   doesn't say who made a change.
+- 2026-09-25 (row security): Added the Row and Column Policies tab (second tab). Postgres row security: a table
+  with it on returns no rows until a policy allows some; policies are `imp_rls_<hash>`, "column is one of
+  values", for one role, stored as a JSON comment. Batch kinds `enableRls`, `disableRls`, `createRowPolicy`,
+  `dropRowPolicy`; every batch ends by removing policies of roles that lost access (recorded as a
+  `pruneOrphanPolicies` step), and `drop owned` handles deleted roles. `metabase_reader` has BYPASSRLS, which
+  does not carry through SET ROLE (verified: 200 rows as the connection role, 80 as a person with policies).
+  Tested on Postgres 16: union across own and inherited policies, prune on revoke, membership removal,
+  whole-schema revoke, role drop, disable, injection, bad types, duplicates; the app's projection matched the
+  database in every scenario. Column policies are a "coming soon" panel. Still to do: try it with real Metabase
+  users and impersonation, and check whether filter-dropdown value caching can show values from rows a person
+  can't see.

@@ -1,6 +1,7 @@
 import { tableKey } from "./access";
 import type { Access, Mappings, NodeAccess, Role } from "./access";
 import type { Change, RoleKind } from "./changes";
+import type { ColumnInfo, RlsTable, RowPolicy } from "./policies";
 
 // A place in the tree: the whole database, one schema, or one table.
 export type Node =
@@ -18,6 +19,17 @@ export type Editing = {
   stageMembership: (member: string, role: string, add: boolean) => void;
   stageCreateRole: (name: string, kind: RoleKind) => void; // name without the prefix
   stageDeleteRole: (role: string) => void;
+  // Row security. Policies are for one role, one table, and one column.
+  stageEnableRls: (schema: string, table: string) => void;
+  stageDisableRls: (schema: string, table: string) => void;
+  stageCreatePolicy: (role: string, column: ColumnInfo, values: string[]) => void;
+  stageDropPolicy: (policy: RowPolicy) => void;
+  // Change a policy's column or values. It queues removing the old policy and adding the new
+  // one, which the database runs together in the same batch.
+  stageEditPolicy: (policy: RowPolicy, column: ColumnInfo, values: string[]) => void;
+  // Saved policies that will go away because of something else in the queue: a role is
+  // deleted, or loses access to the table.
+  removedPolicies: RowPolicy[];
   removePending: (index: number) => void;
   discard: () => void; // throw the whole queue away
   apply: () => void; // run the queue
@@ -33,6 +45,8 @@ export type Model = {
   access: Access;
   mappings: Mappings;
   saved: { access: Access; mappings: Mappings };
+  // Row security as it would be once the queue has run.
+  rls: { tables: RlsTable[]; policies: RowPolicy[]; columns: ColumnInfo[] };
   editing: Editing;
 };
 
@@ -80,4 +94,13 @@ export function accessAt(
     return access.tableNodeAccess(role, tableKey(node.schema, node.table));
   }
   return access.groupAccess(role, tableKeysUnder(node, model));
+}
+
+// The database roles that can read a table, directly or through a role they belong to.
+// Only these can be given a row policy on it.
+export function rolesWithAccess(model: Model, schema: string, table: string): string[] {
+  const key = tableKey(schema, table);
+  return model.roles
+    .filter((role) => model.access.tableNodeAccess(role.name, key).mark !== "none")
+    .map((role) => role.name);
 }

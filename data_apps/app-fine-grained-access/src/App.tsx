@@ -8,6 +8,9 @@ import "./app.css";
 import { CreateBatch } from "../actions/batch.action";
 import { Grants } from "../queries/grants.query";
 import { Batches } from "../queries/batches.query";
+import { Columns } from "../queries/columns.query";
+import { RlsTables } from "../queries/rls-tables.query";
+import { RowPolicies } from "../queries/row-policies.query";
 import { Memberships } from "../queries/memberships.query";
 import { Roles } from "../queries/roles.query";
 import { SchemaTree } from "../queries/schema-tree.query";
@@ -16,6 +19,7 @@ import { AuditTab } from "./components/AuditTab";
 import { ManageRolesTab } from "./components/ManageRolesTab";
 import { MappingsTab } from "./components/MappingsTab";
 import { PermissionsTab } from "./components/PermissionsTab";
+import { RowPoliciesTab } from "./components/RowPoliciesTab";
 import { SaveResult } from "./components/SaveResult";
 import { TabBar } from "./components/Tabs";
 import { ROLE_PREFIX, buildAccess, buildMappings } from "./lib/access";
@@ -25,6 +29,12 @@ import type { BatchRecord } from "./lib/batch";
 import { addChange, applyChanges, removeChange } from "./lib/changes";
 import type { Change, RoleKind } from "./lib/changes";
 import type { Editing, Model, Node } from "./lib/nodes";
+import {
+  columnKind,
+  parseStoredValues,
+  policyIdentity,
+} from "./lib/policies";
+import type { ColumnInfo, RlsTable, RowPolicy } from "./lib/policies";
 import schema from "./metabase.data";
 
 // Result rows are keyed by the column names Metabase returns ("role_name").
@@ -34,11 +44,15 @@ const grantFields = schema.tables.vGrants.fields;
 const membershipFields = schema.tables.vMemberships.fields;
 const treeFields = schema.tables.vSchemaTree.fields;
 const batchFields = schema.tables.vBatches.fields;
+const rlsTableFields = schema.tables.vRlsTables.fields;
+const policyFields = schema.tables.vRowPolicies.fields;
+const columnFields = schema.tables.vColumns.fields;
 
-type TabName = "permissions" | "mappings" | "manage" | "audit";
+type TabName = "permissions" | "rows" | "mappings" | "manage" | "audit";
 
 const TABS: { value: TabName; label: string }[] = [
   { value: "permissions", label: "Permissions" },
+  { value: "rows", label: "Row and Column Policies" },
   { value: "mappings", label: "Database Role Mappings" },
   { value: "manage", label: "Manage Database Roles" },
   { value: "audit", label: "Audit History" },
@@ -56,6 +70,9 @@ export default function App() {
   const memberships = useMetabaseQuery(Memberships);
   const tree = useMetabaseQuery(SchemaTree);
   const batchQuery = useMetabaseQuery(Batches);
+  const rlsQuery = useMetabaseQuery(RlsTables);
+  const policyQuery = useMetabaseQuery(RowPolicies);
+  const columnQuery = useMetabaseQuery(Columns);
 
   const createBatch = useAction(CreateBatch);
 
@@ -78,12 +95,22 @@ export default function App() {
     grants.isLoading ||
     memberships.isLoading ||
     tree.isLoading ||
-    batchQuery.isLoading;
+    batchQuery.isLoading ||
+    rlsQuery.isLoading ||
+    policyQuery.isLoading ||
+    columnQuery.isLoading;
   if (!isLoading) {
     loadedOnce.current = true;
   }
   const error =
-    roles.error ?? grants.error ?? memberships.error ?? tree.error ?? batchQuery.error;
+    roles.error ??
+    grants.error ??
+    memberships.error ??
+    tree.error ??
+    batchQuery.error ??
+    rlsQuery.error ??
+    policyQuery.error ??
+    columnQuery.error;
 
   const roleList: Role[] = (roles.data?.rows ?? []).map((row) => ({
     name: String(row[roleFields.roleName.name]),
@@ -100,6 +127,38 @@ export default function App() {
       role: String(row[membershipFields.roleName.name]),
     }),
   );
+
+  const rlsTableList: RlsTable[] = (rlsQuery.data?.rows ?? []).map((row) => ({
+    schema: String(row[rlsTableFields.schemaName.name]),
+    table: String(row[rlsTableFields.tableName.name]),
+  }));
+  const policyList: RowPolicy[] = (policyQuery.data?.rows ?? []).map((row) => {
+    const managed = String(row[policyFields.isManaged.name]) === "true";
+    return {
+      name: String(row[policyFields.policyName.name]),
+      role: String(row[policyFields.roleName.name]),
+      schema: String(row[policyFields.schemaName.name]),
+      table: String(row[policyFields.tableName.name]),
+      column: String(row[policyFields.filterColumn.name] ?? ""),
+      values: managed ? parseStoredValues(row[policyFields.filterValues.name]) : [],
+      managed,
+      definition: String(row[policyFields.definition.name] ?? ""),
+    };
+  });
+  const columnList: ColumnInfo[] = (columnQuery.data?.rows ?? []).flatMap((row) => {
+    const kind = columnKind(String(row[columnFields.typeKind.name]));
+    return kind
+      ? [
+          {
+            schema: String(row[columnFields.schemaName.name]),
+            table: String(row[columnFields.tableName.name]),
+            column: String(row[columnFields.columnName.name]),
+            dataType: String(row[columnFields.dataType.name]),
+            kind,
+          },
+        ]
+      : [];
+  });
 
   // schema -> its tables, in the order the query returned them.
   const tables: Record<string, string[]> = {};
@@ -200,6 +259,8 @@ export default function App() {
         grants.refetch(),
         memberships.refetch(),
         batchQuery.refetch(),
+        rlsQuery.refetch(),
+        policyQuery.refetch(),
       ]);
       setApplying(false);
     }
@@ -227,6 +288,95 @@ export default function App() {
           ? removeChange(queue, created)
           : addChange(queue, { kind: "dropRole", role });
       }),
+    stageEnableRls: (schema: string, table: string) =>
+      stage({ kind: "enableRls", schema, table }),
+    stageDisableRls: (schema: string, table: string) =>
+      setPending((queue) => {
+        // Row security that was only queued is turned off by taking that change back out.
+        const enabled = queue.findIndex(
+          (change) =>
+            change.kind === "enableRls" && change.schema === schema && change.table === table,
+        );
+        return enabled >= 0
+          ? removeChange(queue, enabled)
+          : addChange(queue, { kind: "disableRls", schema, table });
+      }),
+    stageCreatePolicy: (role: string, column: ColumnInfo, values: string[]) =>
+      setPending((queue) => {
+        const change: Change = {
+          kind: "createRowPolicy",
+          role,
+          schema: column.schema,
+          table: column.table,
+          column: column.column,
+          columnKind: column.kind,
+          values,
+        };
+        // The same policy twice would be refused by the database, so don't queue it.
+        const identity = policyIdentity(change);
+        return projected.policies.some((policy) => policyIdentity(policy) === identity)
+          ? queue
+          : addChange(queue, change);
+      }),
+    stageDropPolicy: (policy: RowPolicy) =>
+      setPending((queue) => {
+        if (policy.pending) {
+          // Only queued: take the queued change back out.
+          const identity = policyIdentity(policy);
+          const index = queue.findIndex(
+            (change) => change.kind === "createRowPolicy" && policyIdentity(change) === identity,
+          );
+          return index >= 0 ? removeChange(queue, index) : queue;
+        }
+        const queued = queue.some(
+          (change) => change.kind === "dropRowPolicy" && change.policy === policy.name,
+        );
+        return queued
+          ? queue
+          : addChange(queue, {
+              kind: "dropRowPolicy",
+              policy: policy.name,
+              role: policy.role,
+              schema: policy.schema,
+              table: policy.table,
+              column: policy.column,
+              values: policy.values,
+            });
+      }),
+    stageEditPolicy: (policy: RowPolicy, column: ColumnInfo, values: string[]) =>
+      setPending((queue) => {
+        let next = queue;
+        if (policy.pending) {
+          // Only queued: replace the queued change.
+          const identity = policyIdentity(policy);
+          const index = next.findIndex(
+            (change) => change.kind === "createRowPolicy" && policyIdentity(change) === identity,
+          );
+          if (index >= 0) {
+            next = removeChange(next, index);
+          }
+        } else {
+          next = addChange(next, {
+            kind: "dropRowPolicy",
+            policy: policy.name,
+            role: policy.role,
+            schema: policy.schema,
+            table: policy.table,
+            column: policy.column,
+            values: policy.values,
+          });
+        }
+        return addChange(next, {
+          kind: "createRowPolicy",
+          role: policy.role,
+          schema: column.schema,
+          table: column.table,
+          column: column.column,
+          columnKind: column.kind,
+          values,
+        });
+      }),
+    removedPolicies: [],
     removePending: (index: number) =>
       setPending((queue) => removeChange(queue, index)),
     discard: () => {
@@ -238,8 +388,15 @@ export default function App() {
   };
 
   // The database as it would be once the queue has run, and as it is now.
-  const saved = { roles: roleList, grants: grantList, memberships: membershipList };
+  const saved = {
+    roles: roleList,
+    grants: grantList,
+    memberships: membershipList,
+    rlsTables: rlsTableList,
+    policies: policyList,
+  };
   const projected = applyChanges(saved, pending, tables);
+  editing.removedPolicies = projected.removedPolicies;
 
   const model: Model = {
     databaseName,
@@ -251,6 +408,11 @@ export default function App() {
       access: buildAccess(grantList, membershipList),
       mappings: buildMappings(membershipList),
     },
+    rls: {
+      tables: projected.rlsTables,
+      policies: projected.policies,
+      columns: columnList,
+    },
     editing,
   };
 
@@ -258,14 +420,6 @@ export default function App() {
     <div className="app">
       <div className="app-panel">
         <h1>Fine Grained Access Management</h1>
-        <p className="intro">
-          Manage the database roles that Metabase users can be granted through
-          connection impersonation. Which Metabase user uses which of these
-          database roles is set in Metabase, with a user attribute and the
-          impersonation settings. This app only manages the database roles and
-          what they can read. Changes you make are queued and marked with a
-          dashed outline. Nothing happens until you choose Apply.
-        </p>
 
         {saveError && (
           <div className="banner banner--error" role="alert">
@@ -299,6 +453,9 @@ export default function App() {
             {/* Both tabs stay mounted so each keeps its selection when you switch. */}
             <div hidden={tab !== "permissions"}>
               <PermissionsTab model={model} />
+            </div>
+            <div hidden={tab !== "rows"}>
+              <RowPoliciesTab model={model} />
             </div>
             <div hidden={tab !== "mappings"}>
               <MappingsTab model={model} />

@@ -14,14 +14,14 @@ import { TreeFilter } from "./TreeFilter";
 type Perspective = "object" | "role";
 
 const PERSPECTIVES: { value: Perspective; label: string }[] = [
-  { value: "object", label: "By database object" },
   { value: "role", label: "By database role" },
+  { value: "object", label: "By database object" },
 ];
 
-// Two views of the same data. "By database object": pick something in the tree, see every
+// Two views of the same data. "By database role" comes first. "By database object": pick something in the tree, see every
 // database role. "By database role": pick a database role, see the tree with what it can read.
 export function PermissionsTab({ model }: { model: Model }) {
-  const [perspective, setPerspective] = useState<Perspective>("object");
+  const [perspective, setPerspective] = useState<Perspective>("role");
   const [node, setNode] = useState<Node>(DATABASE_NODE);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   // Schemas start collapsed, so a long tree stays short until you open something.

@@ -247,3 +247,43 @@ insert into analytics.dim_channel values
   (3, 'Web Store', 'Online'),
   (4, 'Marketplace', 'Online'),
   (5, 'Retail', 'Offline');
+
+-- ===== Demo rows for the row security tab =====
+-- About 200 orders spread over the regions in dim_region, and 60 employees spread over the
+-- departments in dim_department, so a row policy visibly changes what a role sees.
+
+insert into staging.sales_orders_wide
+select
+  n,
+  date '2024-01-01' + (n * 5 % 700),
+  1000 + n % 40,
+  'Customer ' || (1000 + n % 40),
+  (array['Enterprise', 'Mid-market', 'Small business'])[1 + n % 3],
+  r.region_name,
+  r.country_name,
+  (array['Ava Brooks', 'Liam Chen', 'Noor Haddad', 'Sofia Reyes', 'Ken Ito'])[1 + n % 5],
+  (select channel_name from analytics.dim_channel where channel_key = 1 + n % 5),
+  (array['Completed', 'Completed', 'Completed', 'Pending', 'Cancelled'])[1 + n % 5],
+  'USD',
+  (subtotal)::numeric(14,2),
+  (subtotal * 0.05)::numeric(14,2),
+  (subtotal * 0.08)::numeric(14,2),
+  (subtotal * 1.03)::numeric(14,2)
+from generate_series(1, 200) n
+join analytics.dim_region r on r.region_key = 1 + n % 10
+cross join lateral (select 100 + (n * 37 % 900) as subtotal) s;
+
+insert into staging.hr_employees_wide
+select
+  n,
+  'Employee ' || n,
+  'employee' || n || '@example.com',
+  date '2018-01-01' + (n * 53 % 2500),
+  (array['Analyst', 'Manager', 'Specialist', 'Director', 'Associate'])[1 + n % 5],
+  d.department_name,
+  'Manager ' || (1 + n % 8),
+  (array['Remote', 'New York', 'London', 'Berlin'])[1 + n % 4],
+  (array['Full time', 'Full time', 'Part time', 'Contractor'])[1 + n % 4],
+  n % 9 <> 0
+from generate_series(1, 60) n
+join analytics.dim_department d on d.department_key = 1 + n % 10;

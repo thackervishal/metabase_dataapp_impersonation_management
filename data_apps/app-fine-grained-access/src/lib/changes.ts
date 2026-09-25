@@ -1,9 +1,11 @@
 // Changes people ask for are queued here, and only run when they press Apply.
 // Everything in this file is plain functions: no React, no queries.
 
-import { tableKey } from "./access";
+import { buildAccess, tableKey } from "./access";
 import type { Grant, Membership, Role } from "./access";
 import type { Node } from "./nodes";
+import { describeValues } from "./policies";
+import type { ColumnKind, RlsTable, RowPolicy } from "./policies";
 
 export type RoleKind = "functional" | "person";
 
@@ -11,13 +13,35 @@ export type Change =
   | { kind: "grant"; role: string; node: Node; grant: boolean }
   | { kind: "membership"; member: string; role: string; add: boolean }
   | { kind: "createRole"; role: string; roleKind: RoleKind }
-  | { kind: "dropRole"; role: string };
+  | { kind: "dropRole"; role: string }
+  | { kind: "enableRls"; schema: string; table: string }
+  | { kind: "disableRls"; schema: string; table: string }
+  | {
+      kind: "createRowPolicy";
+      role: string;
+      schema: string;
+      table: string;
+      column: string;
+      columnKind: ColumnKind;
+      values: string[];
+    }
+  | {
+      kind: "dropRowPolicy";
+      policy: string; // the database's name for it
+      role: string;
+      schema: string;
+      table: string;
+      column: string;
+      values: string[];
+    };
 
 // What the app has loaded from the database.
 export type State = {
   roles: Role[];
   grants: Grant[];
   memberships: Membership[];
+  rlsTables: RlsTable[];
+  policies: RowPolicy[];
 };
 
 type TableRef = { schema: string; table: string };
@@ -62,6 +86,14 @@ export function describeChange(change: Change, databaseName: string): string {
       return `Create the ${change.roleKind} database role ${change.role}`;
     case "dropRole":
       return `Delete the database role ${change.role}`;
+    case "enableRls":
+      return `Turn on row security for ${change.schema}.${change.table}`;
+    case "disableRls":
+      return `Turn off row security for ${change.schema}.${change.table} and remove its row policies`;
+    case "createRowPolicy":
+      return `Let ${change.role} see rows of ${change.schema}.${change.table} where ${change.column} is one of: ${describeValues(change.values)}`;
+    case "dropRowPolicy":
+      return `Stop letting ${change.role} see rows of ${change.schema}.${change.table} where ${change.column} is one of: ${describeValues(change.values)}`;
   }
 }
 
@@ -103,7 +135,12 @@ function mentions(change: Change, role: string): boolean {
   switch (change.kind) {
     case "grant":
     case "dropRole":
+    case "createRowPolicy":
+    case "dropRowPolicy":
       return change.role === role;
+    case "enableRls":
+    case "disableRls":
+      return false;
     case "membership":
       return change.member === role || change.role === role;
     case "createRole":
@@ -116,6 +153,17 @@ function mentions(change: Change, role: string): boolean {
 export function removeChange(queue: Change[], index: number): Change[] {
   const removed = queue[index];
   const rest = queue.filter((_, position) => position !== index);
+  if (removed?.kind === "enableRls") {
+    // Policies queued for a table whose row security was never turned on would fail.
+    return rest.filter(
+      (change) =>
+        !(
+          change.kind === "createRowPolicy" &&
+          change.schema === removed.schema &&
+          change.table === removed.table
+        ),
+    );
+  }
   if (!removed || removed.kind !== "createRole") {
     return rest;
   }
@@ -129,10 +177,18 @@ export function applyChanges(
   base: State,
   changes: Change[],
   tables: Record<string, string[]>,
-): State {
+): State & { removedPolicies: RowPolicy[] } {
   let roles = [...base.roles];
   let grants = [...base.grants];
   let memberships = [...base.memberships];
+  let rlsTables = [...base.rlsTables];
+  let policies = [...base.policies];
+  // Saved policies that go away as a side effect of something else in the queue.
+  const removedPolicies: RowPolicy[] = [];
+  const sameTable = (
+    a: { schema: string; table: string },
+    b: { schema: string; table: string },
+  ) => a.schema === b.schema && a.table === b.table;
 
   for (const change of changes) {
     if (change.kind === "grant") {
@@ -168,7 +224,33 @@ export function applyChanges(
       }
     } else if (change.kind === "createRole") {
       roles.push({ name: change.role, kind: change.roleKind, pending: true });
+    } else if (change.kind === "enableRls") {
+      if (!rlsTables.some((t) => sameTable(t, change))) {
+        rlsTables.push({ schema: change.schema, table: change.table, pending: true });
+      }
+    } else if (change.kind === "disableRls") {
+      rlsTables = rlsTables.filter((t) => !sameTable(t, change));
+      policies = policies.filter((p) => !(p.managed && sameTable(p, change)));
+    } else if (change.kind === "createRowPolicy") {
+      policies.push({
+        name: "",
+        role: change.role,
+        schema: change.schema,
+        table: change.table,
+        column: change.column,
+        values: change.values,
+        managed: true,
+        definition: "",
+        pending: true,
+      });
+    } else if (change.kind === "dropRowPolicy") {
+      policies = policies.filter((p) => p.name !== change.policy);
     } else {
+      // dropRole. The database removes the role's row policies along with it.
+      removedPolicies.push(
+        ...policies.filter((p) => p.managed && !p.pending && p.role === change.role),
+      );
+      policies = policies.filter((p) => p.role !== change.role);
       roles = roles.filter((role) => role.name !== change.role);
       grants = grants.filter((g) => g.role !== change.role);
       memberships = memberships.filter(
@@ -177,6 +259,14 @@ export function applyChanges(
     }
   }
 
+  // The database ends every batch by removing row policies for roles that no longer have
+  // access to the table, so the screens show the same.
+  const access = buildAccess(grants, memberships);
+  const lost = (p: RowPolicy) =>
+    p.managed && access.tableNodeAccess(p.role, tableKey(p.schema, p.table)).mark === "none";
+  removedPolicies.push(...policies.filter((p) => lost(p) && !p.pending));
+  policies = policies.filter((p) => !lost(p));
+
   roles.sort((a, b) => a.name.localeCompare(b.name));
-  return { roles, grants, memberships };
+  return { roles, grants, memberships, rlsTables, policies, removedPolicies };
 }

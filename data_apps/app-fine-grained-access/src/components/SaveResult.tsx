@@ -18,9 +18,10 @@ export function SaveResult({
   return (
     <details className="last-save" open>
       <summary>
-        This save: {applied ? "applied and verified" : "failed, nothing changed"}
+        {applied ? "Saved" : "Not saved"}
         {" · "}
         {count} {count === 1 ? "change" : "changes"}
+        {!applied && ", nothing was changed"}
       </summary>
       <BatchDetails batch={batch} />
       <button type="button" className="link" onClick={onDismiss}>
