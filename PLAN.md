@@ -425,3 +425,7 @@ run as the impersonated role and will fail unless that role can `INSERT` into th
   `v_batches`). Verified: success, failure with full rollback, malformed input, forged status, a 174 KB
   batch, and the flow through the app's copied action. The old command tables, triggers, and models are
   retired. Known caveat: regenerating the typed schema after a build suffixes duplicated model names.
+- 2026-09-25 (audit): The result of a save now shows only after pressing Apply, in a panel that can be
+  dismissed. A fourth tab, Audit History, lists every recorded batch (newest first, latest 100) with the SQL
+  for each. The app is admin-only, so there is nothing to set up for other people. Known gap: the record
+  doesn't say who made a change.

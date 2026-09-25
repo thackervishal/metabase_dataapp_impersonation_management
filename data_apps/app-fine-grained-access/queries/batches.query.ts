@@ -4,11 +4,11 @@ import schema from "../src/metabase.data";
 
 const batches = schema.tables.vBatches;
 
-// The most recent save, with what the database recorded for it. Read on every load, so the
-// outcome of a save is still there after a page reload.
-export const LatestBatch = defineQuery({
+// The most recent saves, newest first, with what the database recorded for each. The first
+// row is the latest save; the audit tab lists them all.
+export const Batches = defineQuery({
     source: batches,
     orderBys: [orderBy(batches.fields.batchId, "desc")],
-    limit: 1,
-    savedQuestionSourceId: 146
+    limit: 100,
+    savedQuestionSourceId: 148
 });

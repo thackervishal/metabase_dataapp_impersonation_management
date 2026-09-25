@@ -748,3 +748,56 @@ button.row.row--active {
   border-color: var(--danger);
   color: var(--danger);
 }
+
+/* Audit History */
+
+.audit-row {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.audit-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 4px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.audit-caret {
+  flex-shrink: 0;
+  width: 14px;
+  color: var(--text-3);
+}
+
+.audit-when {
+  flex-shrink: 0;
+  min-width: 170px;
+}
+
+.audit-summary .status {
+  margin-left: 0;
+}
+
+.audit-count {
+  flex-shrink: 0;
+  color: var(--text-2);
+}
+
+.audit-error {
+  overflow: hidden;
+  color: var(--danger);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-row .pending-list {
+  max-height: none;
+  padding-left: 40px;
+}

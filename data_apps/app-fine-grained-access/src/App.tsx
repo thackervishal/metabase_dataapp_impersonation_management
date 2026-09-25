@@ -7,19 +7,20 @@ import { useEffect, useRef, useState } from "react";
 import "./app.css";
 import { CreateBatch } from "../actions/batch.action";
 import { Grants } from "../queries/grants.query";
-import { LatestBatch } from "../queries/latest-batch.query";
+import { Batches } from "../queries/batches.query";
 import { Memberships } from "../queries/memberships.query";
 import { Roles } from "../queries/roles.query";
 import { SchemaTree } from "../queries/schema-tree.query";
 import { ApplyBar } from "./components/ApplyBar";
-import { LastSave } from "./components/LastSave";
+import { AuditTab } from "./components/AuditTab";
 import { ManageRolesTab } from "./components/ManageRolesTab";
 import { MappingsTab } from "./components/MappingsTab";
 import { PermissionsTab } from "./components/PermissionsTab";
+import { SaveResult } from "./components/SaveResult";
 import { TabBar } from "./components/Tabs";
 import { ROLE_PREFIX, buildAccess, buildMappings } from "./lib/access";
 import type { Grant, Membership, Role } from "./lib/access";
-import { parseOutcomes, toWire } from "./lib/batch";
+import { toWire } from "./lib/batch";
 import type { BatchRecord } from "./lib/batch";
 import { addChange, applyChanges, removeChange } from "./lib/changes";
 import type { Change, RoleKind } from "./lib/changes";
@@ -34,12 +35,13 @@ const membershipFields = schema.tables.vMemberships.fields;
 const treeFields = schema.tables.vSchemaTree.fields;
 const batchFields = schema.tables.vBatches.fields;
 
-type TabName = "permissions" | "mappings" | "manage";
+type TabName = "permissions" | "mappings" | "manage" | "audit";
 
 const TABS: { value: TabName; label: string }[] = [
   { value: "permissions", label: "Permissions" },
   { value: "mappings", label: "Database Role Mappings" },
   { value: "manage", label: "Manage Database Roles" },
+  { value: "audit", label: "Audit History" },
 ];
 
 // Postgres errors come back as a message the person can act on, so show it as it is.
@@ -53,7 +55,7 @@ export default function App() {
   const grants = useMetabaseQuery(Grants);
   const memberships = useMetabaseQuery(Memberships);
   const tree = useMetabaseQuery(SchemaTree);
-  const latest = useMetabaseQuery(LatestBatch);
+  const batchQuery = useMetabaseQuery(Batches);
 
   const createBatch = useAction(CreateBatch);
 
@@ -63,6 +65,8 @@ export default function App() {
   const [applying, setApplying] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Which save's result is showing. It stays empty until you press Apply.
+  const [resultId, setResultId] = useState<number | null>(null);
   // A save whose result we haven't seen yet: what we sent, and the newest batch before it.
   const inflight = useRef<{ payload: string; previousId: number } | null>(null);
 
@@ -74,12 +78,12 @@ export default function App() {
     grants.isLoading ||
     memberships.isLoading ||
     tree.isLoading ||
-    latest.isLoading;
+    batchQuery.isLoading;
   if (!isLoading) {
     loadedOnce.current = true;
   }
   const error =
-    roles.error ?? grants.error ?? memberships.error ?? tree.error ?? latest.error;
+    roles.error ?? grants.error ?? memberships.error ?? tree.error ?? batchQuery.error;
 
   const roleList: Role[] = (roles.data?.rows ?? []).map((row) => ({
     name: String(row[roleFields.roleName.name]),
@@ -109,20 +113,20 @@ export default function App() {
     ];
   }
 
-  // The database's own record of the latest save.
-  const latestRow = latest.data?.rows[0];
-  const latestBatch: BatchRecord | null = latestRow
-    ? {
-        id: Number(latestRow[batchFields.batchId.name]),
-        requestedAt: String(latestRow[batchFields.requestedAt.name]),
-        status: String(latestRow[batchFields.status.name]),
-        errorMessage: latestRow[batchFields.errorMessage.name]
-          ? String(latestRow[batchFields.errorMessage.name])
-          : null,
-        changes: String(latestRow[batchFields.changes.name]),
-        outcomes: parseOutcomes(latestRow[batchFields.results.name]),
-      }
-    : null;
+  // The database's own record of past saves, newest first. The first one is the latest.
+  const batchList: BatchRecord[] = (batchQuery.data?.rows ?? []).map((row) => ({
+    id: Number(row[batchFields.batchId.name]),
+    requestedAt: String(row[batchFields.requestedAt.name]),
+    status: String(row[batchFields.status.name]),
+    errorMessage: row[batchFields.errorMessage.name]
+      ? String(row[batchFields.errorMessage.name])
+      : null,
+    changes: String(row[batchFields.changes.name]),
+    results: String(row[batchFields.results.name] ?? ""),
+  }));
+  const latestBatch: BatchRecord | null = batchList[0] ?? null;
+  // The save whose result is on screen. Nothing shows until you press Apply.
+  const shownBatch = batchList.find((batch) => batch.id === resultId) ?? null;
 
   // If a save's response never reached us (a network error, say), the database's record
   // still tells us what happened. When a newer batch appears that holds exactly what we
@@ -139,6 +143,7 @@ export default function App() {
       return;
     }
     inflight.current = null;
+    setResultId(latestBatch.id);
     if (latestBatch.status === "applied") {
       setPending([]);
       setSaveError(null);
@@ -169,30 +174,32 @@ export default function App() {
 
       if (created?.status === "applied") {
         inflight.current = null;
+        setResultId(Number(created.id));
         setPending([]);
         setNotice(
           `Saved. The database applied and verified ${wire.length} ${wire.length === 1 ? "change" : "changes"}.`,
         );
       } else if (created?.status === "failed") {
         inflight.current = null;
+        setResultId(Number(created.id));
         setSaveError(
           `Nothing was changed. ${String(created.error_message ?? "The database refused the batch.")}`,
         );
       } else {
-        setSaveError("Couldn't confirm the result. See Last save for what the database recorded.");
+        setSaveError("Couldn't confirm the result. See the Audit History tab for what the database recorded.");
       }
     } catch (failure) {
       // The request may or may not have reached the database. The reload below picks up
       // its record, and the effect above settles it.
       setSaveError(
-        `Couldn't confirm the result (${describeError(failure)}). See Last save for what the database recorded.`,
+        `Couldn't confirm the result (${describeError(failure)}). See the Audit History tab for what the database recorded.`,
       );
     } finally {
       await Promise.all([
         roles.refetch(),
         grants.refetch(),
         memberships.refetch(),
-        latest.refetch(),
+        batchQuery.refetch(),
       ]);
       setApplying(false);
     }
@@ -299,7 +306,12 @@ export default function App() {
             <div hidden={tab !== "manage"}>
               <ManageRolesTab model={model} />
             </div>
-            <LastSave batch={latestBatch} />
+            <div hidden={tab !== "audit"}>
+              <AuditTab batches={batchList} />
+            </div>
+            {shownBatch && (
+              <SaveResult batch={shownBatch} onDismiss={() => setResultId(null)} />
+            )}
           </>
         )}
 

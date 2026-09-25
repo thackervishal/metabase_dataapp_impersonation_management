@@ -41,8 +41,18 @@ export type BatchRecord = {
   status: string; // "applied" or "failed"
   errorMessage: string | null;
   changes: string; // exactly what was sent
-  outcomes: Outcome[];
+  results: string; // what the database recorded, as JSON text; read with parseOutcomes
 };
+
+// How many changes were in a batch. A value that can't be read counts as zero.
+export function countChanges(changes: string): number {
+  try {
+    const parsed: unknown = JSON.parse(changes);
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
+}
 
 // Turn the text the database stored into outcomes. It always writes valid JSON, but a
 // bad value should show as "no details" and not break the screen.

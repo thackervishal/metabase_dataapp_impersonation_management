@@ -55,7 +55,7 @@ Two things about how data apps behave surprised us:
 | `src/App.tsx`             | The main screen, currently "Hello"                                | Edit (your main file)          |
 | `src/theme.ts`            | Colors and fonts for Metabase-rendered pieces                     | Edit rarely                    |
 | `src/app.css`             | Colors for light and dark mode, cards, and rows                   | Edit                           |
-| `src/components/`         | Screen pieces: three tabs, the tree, role lists, dialogs, and icons | Edit                           |
+| `src/components/`         | Screen pieces: four tabs, the tree, role lists, dialogs, and icons | Edit                           |
 | `src/lib/`                | `access.ts`, `nodes.ts`, `changes.ts`, `batch.ts`| Edit                           |
 | `src/metabase.data.ts`    | Your tables, views, models, and actions as TypeScript             | Generated                      |
 | `queries/`, `actions/`    | One file per topic; the hooks accept only what's declared here    | Edit (your files go here)      |
@@ -210,7 +210,7 @@ Nothing you click changes the database. A click queues a change, and the change 
 
 **A failed batch isn't an error to Metabase.** Because the row is saved either way, the action succeeds even when the batch failed, and the answer is in the row's `status`. The app reads that status from the response.
 
-**The record survives a page reload.** The row holds what was asked, the exact SQL the database ran, and the outcome of each change. The **Last save** section at the bottom of the page reads the newest row from the database on every load, so it's there after a reload, with the outcome and the SQL for each change (or, for a failed batch, which changes were rolled back). If a response never reaches the browser, the app notices that a newer row with exactly what it sent has appeared, and settles the outcome from it. A request that never reached the database leaves no row, which means nothing happened.
+**The database keeps the record, and the app shows it two ways.** The row holds what was asked, the exact SQL the database ran, and the outcome of each change. Right after you press Apply, a panel under the tabs shows the result of that save, with the SQL for each change (or, for a failed save, which changes were rolled back). It appears only after you press Apply, and you can dismiss it. It never shows on load. The **Audit History** tab lists every save the database has recorded, newest first, and each row opens to show the same detail. Because the database keeps the record, it survives a page reload. If a response never reaches the browser, the app notices that a newer row with exactly what it sent has appeared, and settles the outcome from it. A request that never reached the database leaves no row, which means nothing happened. The record does not say who made the change, because the action doesn't pass the Metabase user through. Metabase's own action audit may record that.
 
 **The screens update after Apply without a refresh.** The app never stores who can read what. It works that out in the browser from three lists it loaded: the roles, the direct grants, and the memberships. After Apply, it reloads those, and every screen that depends on them redraws. That's why removing a person from a functional database role updates the access on the Permissions tab.
 
@@ -225,3 +225,7 @@ Nothing you click changes the database. A click queues a change, and the change 
 **Dialogs handle the keyboard on themselves.** The sandbox the app runs in blocks keyboard listeners on the whole document, so the dialog catches the Escape key on its own element instead, and focus starts inside it. Clicking the dim area around a dialog also closes it.
 
 **What it doesn't do yet.** Tables created after a schema was granted aren't covered, and we've left that for a separate project. The screen ignores grants to `PUBLIC` and doesn't show schema-level `USAGE`, so a database role could look like it has access to tables it can't reach.
+
+## Who can use the app
+
+Only admins need to. Metabase lets admins open any app, so nobody has to be added to the app's permission group, and the group can stay empty. The app's saved questions and model copy live in a Metabase-managed collection, and no one needs access to it. Keep data access to the `fine_grained_access` views limited to admins as well, because anyone who can read them can see who has access to what.
