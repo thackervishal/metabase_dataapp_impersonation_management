@@ -270,3 +270,32 @@ export function applyChanges(
   roles.sort((a, b) => a.name.localeCompare(b.name));
   return { roles, grants, memberships, rlsTables, policies, removedPolicies };
 }
+
+// Queued row policies depend on things queued before them: the table has row security on,
+// and the role can read it. If one of those changes is taken back, the policy would be
+// refused by the database and the whole save would fail. This walks the queue in order and
+// drops any policy whose dependencies are no longer there, and returns what it dropped.
+export function settleQueue(
+  base: State,
+  queue: Change[],
+  tables: Record<string, string[]>,
+): { queue: Change[]; dropped: Change[] } {
+  const kept: Change[] = [];
+  const dropped: Change[] = [];
+  for (const change of queue) {
+    if (change.kind === "createRowPolicy") {
+      const before = applyChanges(base, kept, tables);
+      const access = buildAccess(before.grants, before.memberships);
+      const ready =
+        before.roles.some((role) => role.name === change.role) &&
+        before.rlsTables.some((t) => t.schema === change.schema && t.table === change.table) &&
+        access.tableNodeAccess(change.role, tableKey(change.schema, change.table)).mark !== "none";
+      if (!ready) {
+        dropped.push(change);
+        continue;
+      }
+    }
+    kept.push(change);
+  }
+  return { queue: kept, dropped };
+}

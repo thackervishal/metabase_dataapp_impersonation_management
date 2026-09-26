@@ -26,7 +26,7 @@ import { ROLE_PREFIX, buildAccess, buildMappings } from "./lib/access";
 import type { Grant, Membership, Role } from "./lib/access";
 import { toWire } from "./lib/batch";
 import type { BatchRecord } from "./lib/batch";
-import { addChange, applyChanges, removeChange } from "./lib/changes";
+import { addChange, applyChanges, removeChange, settleQueue } from "./lib/changes";
 import type { Change, RoleKind } from "./lib/changes";
 import type { Editing, Model, Node } from "./lib/nodes";
 import {
@@ -206,7 +206,6 @@ export default function App() {
     if (latestBatch.status === "applied") {
       setPending([]);
       setSaveError(null);
-      setNotice("The save went through. The database recorded it as applied and verified.");
     } else {
       setSaveError(
         `Nothing was changed. ${latestBatch.errorMessage ?? "The database refused the batch."}`,
@@ -235,9 +234,6 @@ export default function App() {
         inflight.current = null;
         setResultId(Number(created.id));
         setPending([]);
-        setNotice(
-          `Saved. The database applied and verified ${wire.length} ${wire.length === 1 ? "change" : "changes"}.`,
-        );
       } else if (created?.status === "failed") {
         inflight.current = null;
         setResultId(Number(created.id));
@@ -266,8 +262,28 @@ export default function App() {
     }
   }
 
-  const stage = (change: Change) =>
-    setPending((queue) => addChange(queue, change));
+  // Every edit to the queue goes through here. A queued row policy that depended on something
+  // that was just taken back is removed too, and you're told, so Apply can't fail on it.
+  const update = (change: (queue: Change[]) => Change[]) => {
+    const settled = settleQueue(saved, change(pending), tables);
+    setPending(settled.queue);
+    if (settled.dropped.length > 0) {
+      const count = settled.dropped.length;
+      setNotice(
+        `Also removed ${count} queued row ${count === 1 ? "policy" : "policies"} that depended on it.`,
+      );
+    }
+  };
+
+  // The message at the top and the panel below describe the same save, so one Dismiss
+  // clears both.
+  const dismissResult = () => {
+    setSaveError(null);
+    setNotice(null);
+    setResultId(null);
+  };
+
+  const stage = (change: Change) => update((queue) => addChange(queue, change));
 
   const editing: Editing = {
     busy: applying,
@@ -279,7 +295,7 @@ export default function App() {
     stageCreateRole: (name: string, roleKind: RoleKind) =>
       stage({ kind: "createRole", role: ROLE_PREFIX[roleKind] + name, roleKind }),
     stageDeleteRole: (role: string) =>
-      setPending((queue) => {
+      update((queue) => {
         // A role that only exists in the queue is deleted by taking its creation back out.
         const created = queue.findIndex(
           (change) => change.kind === "createRole" && change.role === role,
@@ -291,7 +307,7 @@ export default function App() {
     stageEnableRls: (schema: string, table: string) =>
       stage({ kind: "enableRls", schema, table }),
     stageDisableRls: (schema: string, table: string) =>
-      setPending((queue) => {
+      update((queue) => {
         // Row security that was only queued is turned off by taking that change back out.
         const enabled = queue.findIndex(
           (change) =>
@@ -302,7 +318,7 @@ export default function App() {
           : addChange(queue, { kind: "disableRls", schema, table });
       }),
     stageCreatePolicy: (role: string, column: ColumnInfo, values: string[]) =>
-      setPending((queue) => {
+      update((queue) => {
         const change: Change = {
           kind: "createRowPolicy",
           role,
@@ -319,7 +335,7 @@ export default function App() {
           : addChange(queue, change);
       }),
     stageDropPolicy: (policy: RowPolicy) =>
-      setPending((queue) => {
+      update((queue) => {
         if (policy.pending) {
           // Only queued: take the queued change back out.
           const identity = policyIdentity(policy);
@@ -344,7 +360,7 @@ export default function App() {
             });
       }),
     stageEditPolicy: (policy: RowPolicy, column: ColumnInfo, values: string[]) =>
-      setPending((queue) => {
+      update((queue) => {
         let next = queue;
         if (policy.pending) {
           // Only queued: replace the queued change.
@@ -378,7 +394,7 @@ export default function App() {
       }),
     removedPolicies: [],
     removePending: (index: number) =>
-      setPending((queue) => removeChange(queue, index)),
+      update((queue) => removeChange(queue, index)),
     discard: () => {
       setPending([]);
       setSaveError(null);
@@ -424,7 +440,7 @@ export default function App() {
         {saveError && (
           <div className="banner banner--error" role="alert">
             <span>{saveError}</span>
-            <button type="button" onClick={() => setSaveError(null)}>
+            <button type="button" onClick={dismissResult}>
               Dismiss
             </button>
           </div>
@@ -432,7 +448,7 @@ export default function App() {
         {notice && (
           <div className="banner banner--ok" role="status">
             <span>{notice}</span>
-            <button type="button" onClick={() => setNotice(null)}>
+            <button type="button" onClick={dismissResult}>
               Dismiss
             </button>
           </div>
@@ -467,7 +483,7 @@ export default function App() {
               <AuditTab batches={batchList} />
             </div>
             {shownBatch && (
-              <SaveResult batch={shownBatch} onDismiss={() => setResultId(null)} />
+              <SaveResult batch={shownBatch} onDismiss={dismissResult} />
             )}
           </>
         )}
