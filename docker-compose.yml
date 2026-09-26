@@ -54,6 +54,8 @@ services:
       - "${METABASE_PORT}:3000"
     volumes:
       - ./seed/metabase/config.yml:/metabase-config/config.yml:ro
+      # A local git repo the setup script fills with the built app, so remote sync can pull it without GitHub.
+      - ./data/remote-sync:/remote-sync:ro
     depends_on:
       app-db:
         condition: service_healthy

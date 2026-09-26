@@ -63,7 +63,7 @@ Two things about how data apps behave surprised us:
 | `resources_metadata.json` | Links the app to its Metabase collection and queries              | Generated                      |
 | `dist/index.js`           | The built bundle Metabase runs                                    | Generated (rebuild and commit) |
 
-Two files aren't in git: `.env` holds the stack's passwords and license token, and `.env.local` holds the API key the app's build tools use.
+One file isn't in git: `.env`. You make it by copying `.env.example` and adding your license token. It holds the stack's passwords, the admin API key, and the URL and key the app's build tools use, so nothing else needs setting up.
 
 ## Build the database side first
 
@@ -87,7 +87,7 @@ If you reset the database volume, the seed scripts run again automatically. Rest
 
 ## Prepare Metabase
 
-Do these once, in the admin UI.
+On a new machine, `node scripts/setup-app.mjs` does all of this for you, then builds the app and imports it (see the README). The steps below are what it does, and what to do by hand if you prefer. Do these once, in the admin UI.
 
 1. On the `sample_dwh` connection, turn on **Model actions**. Sync the database schema after any change to the views or tables.
 2. Create one model for each command table. The button is the **+** on the **Models** page, not in the **New** menu. Save them in a collection, here `FineGrainedAccess`.
@@ -110,7 +110,7 @@ Copy the template from the Metabase repo (`skills/metabase-data-app-setup/templa
 
 - Install the SDK with `npm install @metabase/embedding-sdk-react@64-beta`.
 - Remove `dist` and the lockfiles from the app's `.gitignore`. Metabase serves the committed bundle, and the lockfile keeps installs reproducible.
-- Put `DATA_APP_MB_URL` and `DATA_APP_MB_API_KEY` in `.env.local` at the repo root. It's git-ignored, and the build tools use the key to talk to Metabase.
+- The build tools read `DATA_APP_MB_URL` and `DATA_APP_MB_API_KEY` from `.env` at the repo root (`.env.example` already has them, with the same demo key Metabase creates on first boot). They use the key to talk to Metabase.
 
 **Windows build fix.** `npm run build` crashed on Windows with `ERR_INVALID_FILE_URL_PATH`. The SDK's command-line tool has a Linux file path from Metabase's build machine baked in, and Windows rejects it at startup. `scripts/windows-fix.cjs` makes that one call tolerant, and `package.json` runs the tool through it. It does nothing on Linux or macOS. Delete it once the SDK is fixed.
 
@@ -124,7 +124,7 @@ The file has three parts. `tables` lists each table or view with its fields, and
 
 Because it holds ids from one instance, it belongs to that instance. Commit it, but don't edit it. To change it, change Metabase (add a column, a model, or an action) and generate it again. Your queries and actions import from it with `import schema from "../src/metabase.data"`.
 
-Run this from the repo root to write the schema file. It uses the API key from `.env.local`:
+Run this from the repo root to write the schema file. It uses the API key from `.env`:
 
 ```
 curl -o data_apps/app-fine-grained-access/src/metabase.data.ts \

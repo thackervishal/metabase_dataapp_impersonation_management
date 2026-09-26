@@ -440,3 +440,13 @@ run as the impersonated role and will fail unless that role can `INSERT` into th
   database in every scenario. Column policies are a "coming soon" panel. Still to do: try it with real Metabase
   users and impersonation, and check whether filter-dropdown value caching can show values from rows a person
   can't see.
+- 2026-09-26 (fresh-clone setup): Proved the app works from a clean clone on a throwaway stack, then wrote
+  `scripts/setup-app.mjs`. Findings: Metabase has no upload path for apps (they only arrive by remote-sync import from
+  a git repo); the built bundle holds ids from the Metabase it was built against; the SDK's `sync-resources` copes
+  with another instance's ids by recreating everything and injecting new ones; and a `file://` remote-sync repo
+  works without GitHub (a bare repo whose HEAD is `main`, mounted read-only at `/remote-sync`). The script prepares
+  Metabase (model actions, locked-down collection, model and create action), builds in `data/build`, pushes to
+  `data/remote-sync/repo.git`, sets remote sync, and imports. From a brand-new stack it took about 51 seconds; the
+  app's eight queries ran and a batch applied through the copied action. Also found: config-file API keys may
+  contain only letters, digits, + / and = after `mb_` (an underscore stops Metabase booting), so the example key was
+  fixed. Not checked: the app's screens in a browser on the fresh instance.

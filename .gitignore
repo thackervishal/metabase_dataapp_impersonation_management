@@ -1,5 +1,8 @@
 .env
-.env.local
 node_modules/
 /dist/
 .state/
+/data/*
+!/data/remote-sync/
+/data/remote-sync/*
+!/data/remote-sync/.gitkeep

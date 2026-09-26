@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --port 5174",
     "build": "npm run sync-resources && vite build",
-    "sync-resources": "node --require ./scripts/windows-fix.cjs ./node_modules/@metabase/embedding-sdk-react/dist/cli.js data-apps sync-resources",
+    "sync-resources": "node --env-file=../../.env --require ./scripts/windows-fix.cjs ./node_modules/@metabase/embedding-sdk-react/dist/cli.js data-apps sync-resources",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
