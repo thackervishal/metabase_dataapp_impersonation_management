@@ -22,8 +22,9 @@ export type WireChange =
       values: (string | number | boolean)[];
     }
   | { kind: "dropRowPolicy"; schema: string; table: string; policy: string }
-  // Recorded by the database itself at the end of a save, never sent by the app.
-  | { kind: "pruneOrphanPolicies" };
+  // These two are recorded by the database itself at the end of a save, never sent by the app.
+  | { kind: "pruneOrphanPolicies" }
+  | { kind: "pruneOrphanSchemaUsage" };
 
 export function toWire(
   change: Change,
@@ -160,6 +161,8 @@ export function describeWire(change: WireChange | null): string {
       return `Remove row policy ${change.policy} from ${change.schema}.${change.table}`;
     case "pruneOrphanPolicies":
       return "Remove row policies for database roles that no longer have access to the table";
+    case "pruneOrphanSchemaUsage":
+      return "Remove schema access for database roles that no longer have access to any table in it";
   }
 }
 
@@ -221,5 +224,7 @@ export function describeFields(change: WireChange | null): [string, string][] {
       ];
     case "pruneOrphanPolicies":
       return [["Action", "Remove row policies of roles that lost access to the table"]];
+    case "pruneOrphanSchemaUsage":
+      return [["Action", "Remove schema access of roles left with no table access in it"]];
   }
 }

@@ -50,8 +50,8 @@ export function RowPoliciesTab({ model }: { model: Model }) {
       <Segmented options={PERSPECTIVES} value={perspective} onChange={setPerspective} />
 
       {perspective === "table" ? (
-        <div className="layout">
-          <div className="card card--side">
+        <div className="stack">
+          <div className="card card--list">
             <button
               type="button"
               className="btn btn--primary btn--block"
@@ -97,7 +97,7 @@ export function RowPoliciesTab({ model }: { model: Model }) {
             })}
           </div>
 
-          <div className="card card--main">
+          <div className="card">
             {table ? (
               <TablePolicies
                 model={model}
@@ -115,7 +115,7 @@ export function RowPoliciesTab({ model }: { model: Model }) {
         </div>
       ) : (
         <div className="layout">
-          <div className="card card--side">
+          <div className="card card--side card--side-wide">
             <RoleList roles={model.roles} selected={role} onSelect={setSelectedRole} />
           </div>
           <div className="card card--main">

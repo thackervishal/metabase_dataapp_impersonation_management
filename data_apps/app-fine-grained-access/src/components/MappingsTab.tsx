@@ -40,7 +40,7 @@ export function MappingsTab({ model }: { model: Model }) {
 
       {view === "role" ? (
         <div className="layout">
-          <div className="card card--side">
+          <div className="card card--side card--side-wide">
             <RoleList
               roles={functional}
               selected={pickedFunctional}
@@ -74,7 +74,7 @@ export function MappingsTab({ model }: { model: Model }) {
         </div>
       ) : (
         <div className="layout">
-          <div className="card card--side">
+          <div className="card card--side card--side-wide">
             <RoleList
               roles={people}
               selected={pickedPerson}

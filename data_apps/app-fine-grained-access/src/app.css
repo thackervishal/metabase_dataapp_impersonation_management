@@ -59,8 +59,8 @@
 
 /* The whole app sits in one panel, centered and 80 percent of the window wide. */
 .app-panel {
-  width: 80%;
-  max-width: 1600px;
+  width: 70%;
+  max-width: 1300px;
   margin: 0 auto;
   padding: 32px;
   border: 1px solid var(--border);
@@ -164,6 +164,12 @@
 
 .card--side {
   flex: 0 0 300px;
+}
+
+/* A bit more room for the left panel on Permissions and Database Role Mappings, where names
+   run long. The right panel gives up the same amount, since it sits next to it in a flex row. */
+.card--side.card--side-wide {
+  flex-basis: 400px;
 }
 
 .card--main {
@@ -278,6 +284,10 @@ button.row.row--active {
 .tree-row {
   display: flex;
   align-items: center;
+}
+
+.tree-row--divided {
+  border-bottom: 1px solid var(--border);
 }
 
 .chevron {
@@ -698,6 +708,7 @@ button.row.row--active {
 }
 
 .last-save {
+  position: relative;
   margin-top: 20px;
   padding: 12px 16px;
   border: 1px solid var(--border);
@@ -706,8 +717,16 @@ button.row.row--active {
 }
 
 .last-save summary {
+  /* Leave room so the Dismiss button in the corner never overlaps the text. */
+  padding-right: 70px;
   cursor: pointer;
   font-weight: 700;
+}
+
+.last-save-dismiss {
+  position: absolute;
+  top: 12px;
+  right: 16px;
 }
 
 .last-save .pending-list {
@@ -956,4 +975,16 @@ button.row.row--active {
 .removed-policies li {
   padding: 2px 0;
   overflow-wrap: anywhere;
+}
+
+.card--spaced {
+  margin-top: 16px;
+}
+
+/* Two panels, one above the other, each sized to its own list. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
 }

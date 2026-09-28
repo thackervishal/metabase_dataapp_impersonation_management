@@ -309,6 +309,17 @@ begin
                 then jsonb_build_object('removedPolicies', policies_gone) else '{}'::jsonb end);
     end if;
 
+    -- A role can end up with USAGE on a schema but SELECT on none of its tables (revoking
+    -- every table one at a time, rather than the whole schema at once, does this). That
+    -- USAGE grant does nothing but let the role see the schema exists, so remove it too.
+    statements := fine_grained_access.prune_orphan_schema_usage();
+    if coalesce(array_length(statements, 1), 0) > 0 then
+      outcomes := outcomes || jsonb_build_array(jsonb_build_object(
+        'index', position_in_queue + 2,
+        'change', jsonb_build_object('kind', 'pruneOrphanSchemaUsage'),
+        'status', 'applied', 'sql', to_jsonb(statements)));
+    end if;
+
     new.status := 'applied';
     new.results := outcomes::text;
     new.error_message := null;
@@ -609,6 +620,66 @@ begin
 end;
 $$;
 
+-- A role with USAGE on a schema but SELECT on none of its tables holds a stray, no-op
+-- privilege: it can see the schema exists but reach nothing inside it. Revoking a whole
+-- schema at once already drops USAGE along with every table's SELECT (see apply_grant); this
+-- only matters when every table was revoked one at a time instead. Runs at the end of every
+-- batch, the same way prune_orphan_policies does.
+create or replace function fine_grained_access.prune_orphan_schema_usage() returns text[]
+language plpgsql as $$
+declare
+  statements text[] := '{}';
+  statement text;
+  orphan record;
+begin
+  for orphan in
+    select n.nspname as schema_name, r.rolname as role_name
+    from pg_namespace n
+    cross join lateral aclexplode(coalesce(n.nspacl, acldefault('n', n.nspowner))) a
+    join pg_roles r on r.oid = a.grantee
+    where a.privilege_type = 'USAGE'
+      and r.rolname ~ '^imp_(fn|pr)_rl_'
+      and n.nspname <> 'fine_grained_access'
+      and not exists (
+        select 1
+        from pg_class c
+        cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) ca
+        where c.relnamespace = n.oid
+          and c.relkind in ('r', 'p')
+          and ca.grantee = a.grantee
+          and ca.privilege_type = 'SELECT'
+      )
+    order by 1, 2
+  loop
+    statement := format('revoke usage on schema %I from %I', orphan.schema_name, orphan.role_name);
+    execute statement;
+    statements := statements || statement;
+  end loop;
+
+  if exists (
+    select 1
+    from pg_namespace n
+    cross join lateral aclexplode(coalesce(n.nspacl, acldefault('n', n.nspowner))) a
+    join pg_roles r on r.oid = a.grantee
+    where a.privilege_type = 'USAGE'
+      and r.rolname ~ '^imp_(fn|pr)_rl_'
+      and n.nspname <> 'fine_grained_access'
+      and not exists (
+        select 1
+        from pg_class c
+        cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) ca
+        where c.relnamespace = n.oid
+          and c.relkind in ('r', 'p')
+          and ca.grantee = a.grantee
+          and ca.privilege_type = 'SELECT'
+      )
+  ) then
+    raise exception 'check failed: a managed role still holds schema usage with no table access in it';
+  end if;
+  return statements;
+end;
+$$;
+
 -- safe_jsonb stays open to everyone: v_row_policies calls it, and Postgres checks function
 -- permission against the person reading the view, not the view owner. It only parses text.
 revoke execute on function
@@ -616,7 +687,8 @@ revoke execute on function
   fine_grained_access.apply_rls(text, text, boolean),
   fine_grained_access.apply_row_policy_create(text, text, text, text, jsonb),
   fine_grained_access.apply_row_policy_drop(text, text, text),
-  fine_grained_access.prune_orphan_policies()
+  fine_grained_access.prune_orphan_policies(),
+  fine_grained_access.prune_orphan_schema_usage()
 from public;
 
 -- Tables that have row security on, with how many policies the app created and how many it didn't.

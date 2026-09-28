@@ -66,7 +66,7 @@ export function PermissionsTab({ model }: { model: Model }) {
 
       {perspective === "object" ? (
         <div className="layout">
-          <div className="card card--side">
+          <div className="card card--side card--side-wide">
             <TreeFilter value={filter} onChange={setFilter} />
             <SchemaTree
               databaseName={model.databaseName}
@@ -84,7 +84,7 @@ export function PermissionsTab({ model }: { model: Model }) {
         </div>
       ) : (
         <div className="layout">
-          <div className="card card--side">
+          <div className="card card--side card--side-wide">
             <RoleList
               roles={model.roles}
               selected={role}
@@ -104,6 +104,7 @@ export function PermissionsTab({ model }: { model: Model }) {
                   expanded={expanded}
                   onToggle={toggle}
                   filter={filter}
+                  dividers
                   renderMark={(treeNode) => {
                     const access = accessAt(role, treeNode, model);
                     const saved = accessAt(role, treeNode, model, "saved");

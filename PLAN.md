@@ -387,6 +387,64 @@ run as the impersonated role and will fail unless that role can `INSERT` into th
 - Does `v_grants` show correct data for `metabase_reader`? (A2)
 - Read-only vs read-write remote-sync mode for an app-only repo: confirm which behaves better. (B2)
 
+## 7. Known gaps and future work
+
+Not built, not currently planned in detail — recorded here so they aren't lost.
+
+- **Performance at scale: thousands of tables, hundreds of roles.** Not tested at that scale;
+  reasoned through only. `v_grants`/`v_memberships` read `pg_class.relacl` (via `aclexplode`)
+  and `pg_auth_members` — Postgres catalogs, indexed and cache-resident, cheap even with tens
+  of thousands of tables. The real cost is proportional to how many `GRANT` statements actually
+  exist, not to tables × roles, so a normal grant pattern should stay cheap regardless of table
+  count. Two places could still hurt: (1) the app fetches the *entire* `v_grants`/`v_memberships`
+  result on every load and filters client-side, so a genuinely dense grant pattern (many roles
+  individually granted many tables, rather than whole-schema grants) means a large JSON payload
+  and client-side `buildAccess()` cost on every screen load, not just the one being viewed;
+  (2) the schema tree only skips rendering a *collapsed* schema's tables (a real React
+  conditional, not CSS-hidden) — one schema with thousands of tables, expanded, renders every
+  row with no virtualization. Mitigation ideas, cheapest first: scope the grants/memberships
+  queries to the selected role or table instead of fetching everything; virtualize the expanded
+  table list (e.g. `react-window`); require a filter before a very large schema auto-expands on
+  a match; a schema-level summary ("342 tables, 12 roles") with drill-down instead of a flat
+  list. A materialized view is the last resort, not the first: it would trade away the property
+  the whole read side relies on — checkboxes that can never drift from the real catalog, because
+  they never cache anything.
+
+- **More row policy operators.** Today's row policies only support "is one of" (an
+  equality-or-membership list) on text, number, and boolean columns. `between`, `is not one of`,
+  and similar were named as likely follow-ups when the feature was designed
+  (see [DATA_APPS_101.md](DATA_APPS_101.md), "Only 'is one of' for now"). The database function
+  (`apply_row_policy_create`) and the policy's stored shape (`{column, op, values}`, currently
+  always `op: "in"`) were deliberately built to add an operator without reshaping either one —
+  a new operator needs a new `op` value, a new SQL comparison branch, and a matching UI control
+  in `AddPolicyModal`, not a redesign.
+
+- **A table added to a schema after a role was granted the whole schema.** `grant select on all
+  tables in schema X` only covers the tables that exist at the moment it runs; Postgres does not
+  retroactively include a table created afterward (that needs `ALTER DEFAULT PRIVILEGES`, which
+  this app doesn't set up). So today, a role with "all of staging" does **not** automatically
+  gain a newly added `staging` table — it has to be re-granted, by re-running (or re-clicking)
+  the same whole-schema grant. This is a real gap, already noted in passing in
+  [DATA_APPS_101.md](DATA_APPS_101.md) ("What it doesn't do yet"), worth fixing properly:
+  either wire `ALTER DEFAULT PRIVILEGES` when a whole-schema grant runs (so future tables really
+  are covered automatically, matching what the UI implies), or make the gap visible instead of
+  silent (the tree could show a schema-level grant as "partial" the moment a table exists that
+  predates it — needs a per-grant timestamp, which isn't tracked today).
+
+- **A table is deleted.** Expected to be a no-op for the app — Postgres drops whatever ACL
+  entries referenced the table along with it, and every read view already reads `pg_class` live,
+  so a deleted table just stops appearing. Not actually verified end to end (in particular,
+  whether a row policy or a queued/pending change referencing a since-deleted table fails
+  cleanly rather than confusingly).
+
+- **Column filtering / hiding.** The "Column policies: coming soon" panel is a placeholder only.
+  Unlike row policies, this isn't the same mechanism reused — Postgres can't hide a single
+  column from a role that holds table-level SELECT (confirmed during the RLS design phase: a
+  column-level `REVOKE` doesn't take effect while table SELECT is held, and `select *` errors on
+  a genuinely hidden column rather than silently omitting it). Needs a different approach
+  entirely, most likely a generated view per policy that exposes only the allowed columns,
+  rather than a Postgres privilege. Not designed in any detail yet.
+
 ## Status log
 - 2026-09-23: Confirmed the data-apps feature works on the 1.64.0.1-beta local stack (port 3310, separate test stack). Decisions:
   local-only demo (no stats port), source lives in this GitHub repo, remote sync connects to it over HTTPS
@@ -450,3 +508,10 @@ run as the impersonated role and will fail unless that role can `INSERT` into th
   app's eight queries ran and a batch applied through the copied action. Also found: config-file API keys may
   contain only letters, digits, + / and = after `mb_` (an underscore stops Metabase booting), so the example key was
   fixed. Not checked: the app's screens in a browser on the fresh instance.
+- 2026-09-28 (schema usage pruning): Revoking every table in a schema one at a time left a stray USAGE grant
+  behind (the whole-schema revoke path already dropped it in the same statement pair). Added
+  `prune_orphan_schema_usage()`, called at the end of every batch alongside `prune_orphan_policies()`: finds
+  every managed role with USAGE on a schema but SELECT on none of its tables, revokes USAGE, and checks none
+  remain. Recorded as its own `pruneOrphanSchemaUsage` audit step. Tested on a throwaway container (one table
+  at a time vs. whole-schema, re-grant, membership-only access, two roles where only one loses everything,
+  role drop) and verified end to end on the live stack through the real app action.

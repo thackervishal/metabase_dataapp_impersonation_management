@@ -2,6 +2,17 @@
 
 This guide is for developers who know Metabase but are new to data apps, React, and git-based remote sync. It records what this repo does, why each piece exists, and the problems we hit along the way. The design and the concepts (React, hooks, models, actions) live in [PLAN.md](PLAN.md), so this guide links there instead of repeating them.
 
+## What problem are we solving
+
+Connection impersonation is Metabase's recommended way to give different people different data access through one shared database connection. Metabase runs each person's queries as a database role, and Postgres enforces access from there. Someone still has to manage that database side, and that's a recurring set of jobs. This app is the admin tool for them:
+
+- **Database roles.** One functional role per team or need, such as sales, finance, or HR.
+- **Person to role assignment.** Every Metabase user maps to a database role. A person can belong to more than one functional role, and that changes as people join, move, and leave.
+- **Access rules.** What each role can read, direct or inherited through another role, and why. This answers the recurring question, "why does this person see this table?"
+- **Row-level security.** Which rows a role sees, not just which tables.
+- **Column-level security.** Which columns a role sees.
+- **Auditing.** Who changed access, and when.
+
 ## What you're building
 
 A data app is a small React app that Metabase serves at `/apps/<slug>`. This one lets an admin view and change the Postgres side of access control: which database roles exist, what each database role can read on each database object, and which person database roles belong to which functional database roles.

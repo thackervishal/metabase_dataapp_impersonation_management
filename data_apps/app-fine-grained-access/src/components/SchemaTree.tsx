@@ -15,6 +15,9 @@ type SchemaTreeProps = {
   onSelect?: (node: Node) => void;
   // An icon shown at the right end of a row, for example who can read it.
   renderMark?: (node: Node) => ReactNode;
+  // A line under every row. Turn on where a row can run wide enough that it's hard to tell
+  // one from the next, for example a mark on every row.
+  dividers?: boolean;
 };
 
 const INDENT = 20; // pixels per level
@@ -48,6 +51,7 @@ export function SchemaTree({
   selected,
   onSelect,
   renderMark,
+  dividers,
 }: SchemaTreeProps) {
   const filtering = filter.trim() !== "";
   const visible = applyFilter(tables, filter);
@@ -68,7 +72,7 @@ export function SchemaTree({
       </>
     );
     return (
-      <div className="tree-row">
+      <div className={`tree-row${dividers ? " tree-row--divided" : ""}`}>
         <span style={{ width: depth * INDENT, flexShrink: 0 }} />
         {chevron ?? <span style={{ width: 22, flexShrink: 0 }} />}
         {onSelect ? (

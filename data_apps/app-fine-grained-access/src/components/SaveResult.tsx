@@ -23,10 +23,10 @@ export function SaveResult({
         {count} {count === 1 ? "change" : "changes"}
         {!applied && ", nothing was changed"}
       </summary>
-      <BatchDetails batch={batch} />
-      <button type="button" className="link" onClick={onDismiss}>
+      <button type="button" className="link last-save-dismiss" onClick={onDismiss}>
         Dismiss
       </button>
+      <BatchDetails batch={batch} />
     </details>
   );
 }

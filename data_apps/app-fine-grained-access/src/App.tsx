@@ -51,10 +51,10 @@ const columnFields = schema.tables.vColumns.fields;
 type TabName = "permissions" | "rows" | "mappings" | "manage" | "audit";
 
 const TABS: { value: TabName; label: string }[] = [
+  { value: "manage", label: "Manage Database Roles" },
+  { value: "mappings", label: "Database Role Mappings" },
   { value: "permissions", label: "Permissions" },
   { value: "rows", label: "Row and Column Policies" },
-  { value: "mappings", label: "Database Role Mappings" },
-  { value: "manage", label: "Manage Database Roles" },
   { value: "audit", label: "Audit History" },
 ];
 
@@ -76,7 +76,7 @@ export default function App() {
 
   const createBatch = useAction(CreateBatch);
 
-  const [tab, setTab] = useState<TabName>("permissions");
+  const [tab, setTab] = useState<TabName>("manage");
   // Changes people have asked for. Nothing runs until they press Apply.
   const [pending, setPending] = useState<Change[]>([]);
   const [applying, setApplying] = useState(false);
