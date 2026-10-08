@@ -10,13 +10,29 @@ config:
       email: "{{ env MB_ADMIN_EMAIL }}"
       password: "{{ env MB_ADMIN_PASSWORD }}"
       is_superuser: true
+    # Demo people, the same three names used in the MySQL and SQL Server RLS demos.
+    # Each is impersonated as a Postgres person role (see scripts/setup-app.mjs, which
+    # sets each one's db_role attribute and group membership). All demo passwords are
+    # metabot1.
+    - first_name: Bruce
+      last_name: Wayne
+      email: bruce@example.com
+      password: metabot1
+    - first_name: Thor
+      last_name: Odinson
+      email: thor@example.com
+      password: metabot1
+    - first_name: Frodo
+      last_name: Baggins
+      email: frodo@example.com
+      password: metabot1
   api-keys:
     - name: Automation Admin Key
       creator: "{{ env MB_ADMIN_EMAIL }}"
       group: admin
       key: "{{ env MB_AUTOMATION_API_KEY }}"
   databases:
-    - name: sample_dwh
+    - name: dwh
       engine: postgres
       details:
         host: sample-dwh

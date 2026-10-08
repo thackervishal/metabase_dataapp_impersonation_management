@@ -7,21 +7,26 @@
 -- imp = impersonation, fn = functional, pr = person, rl = role. The views only show
 -- roles with those prefixes, and the command triggers refuse any other name, so the app
 -- can't touch roles it didn't create. The prefix is how the app tells the two kinds apart.
+--
+-- Three of these people, Bruce, Thor, and Frodo, are also the names of the Metabase logins
+-- set up in seed/metabase/config.yml and scripts/setup-app.mjs (the same names the MySQL and
+-- SQL Server RLS demos use). The Postgres role and the Metabase login share a name on purpose,
+-- so there's nothing to look up: log in as Bruce, and Bruce is who you are in Postgres too.
 
 create role imp_fn_rl_sales   nologin;
 create role imp_fn_rl_finance nologin;
 create role imp_fn_rl_hr      nologin;
 
-create role imp_pr_rl_alice nologin;   -- sales
-create role imp_pr_rl_bob   nologin;   -- sales + finance (belongs to two roles)
+create role imp_pr_rl_bruce nologin;   -- sales
+create role imp_pr_rl_frodo nologin;   -- sales + finance (belongs to two roles)
 create role imp_pr_rl_carol nologin;   -- finance
-create role imp_pr_rl_dave  nologin;   -- hr
+create role imp_pr_rl_thor  nologin;   -- hr
 create role imp_pr_rl_erin  nologin;   -- hr + finance (belongs to two roles)
 create role imp_pr_rl_frank nologin;   -- no roles yet (empty-state case)
 
-grant imp_fn_rl_sales   to imp_pr_rl_alice, imp_pr_rl_bob;
-grant imp_fn_rl_finance to imp_pr_rl_bob, imp_pr_rl_carol, imp_pr_rl_erin;
-grant imp_fn_rl_hr      to imp_pr_rl_dave, imp_pr_rl_erin;
+grant imp_fn_rl_sales   to imp_pr_rl_bruce, imp_pr_rl_frodo;
+grant imp_fn_rl_finance to imp_pr_rl_frodo, imp_pr_rl_carol, imp_pr_rl_erin;
+grant imp_fn_rl_hr      to imp_pr_rl_thor, imp_pr_rl_erin;
 
 grant usage on schema staging, analytics to imp_fn_rl_sales, imp_fn_rl_finance, imp_fn_rl_hr;
 

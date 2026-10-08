@@ -287,3 +287,17 @@ select
   n % 9 <> 0
 from generate_series(1, 60) n
 join analytics.dim_department d on d.department_key = 1 + n % 10;
+
+-- finance_budgets_wide stays empty of policies in 007_demo_row_security.sql on purpose, to
+-- show a table that's locked down with no rules. These rows give that lockout something real
+-- to hide: without this, finance would see zero rows whether or not the lockout worked.
+insert into staging.finance_budgets_wide
+select
+  n,
+  2024 + n % 2,
+  d.department_name,
+  (array['Salaries', 'Travel', 'Software Licenses', 'Marketing Spend', 'Professional Services'])[1 + n % 5],
+  (array['Q1', 'Q2', 'Q3', 'Q4'])[1 + n % 4],
+  (5000 + (n * 317 % 45000))::numeric(14,2)
+from generate_series(1, 40) n
+join analytics.dim_department d on d.department_key = 1 + n % 10;
